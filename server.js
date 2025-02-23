@@ -160,6 +160,7 @@ const DATA_DIR = path.join(__dirname, 'data');
 const NOTEPADS_FILE = path.join(DATA_DIR, 'notepads.json');
 const PIN = process.env.DUMBPAD_PIN;
 const COOKIE_NAME = 'dumbpad_auth';
+const NOTEPAD_AUTH_COOKIE_PREFIX = 'dumbpad_notepad_';
 const COOKIE_MAX_AGE = 24 * 60 * 60 * 1000; // 24 hours
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const PAGE_HISTORY_COOKIE = 'dumbpad_page_history';
@@ -242,6 +243,27 @@ function secureCompare(a, b) {
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(cookieParser());
+
+// Protect direct-view.html route
+app.get('/direct-view.html', async (req, res, next) => {
+    const noteId = req.query.note;
+    if (!noteId) {
+        return res.redirect('/');
+    }
+
+    const notepadPin = await getNotepadPin(noteId);
+    if (notepadPin) {
+        // Check if user is authenticated for this notepad
+        const authCookie = req.cookies[`${NOTEPAD_AUTH_COOKIE_PREFIX}${noteId}`];
+        if (!authCookie || !secureCompare(authCookie, notepadPin)) {
+            return res.redirect(`/login.html?redirect=${encodeURIComponent(req.originalUrl)}`);
+        }
+    }
+
+    // If no PIN or authenticated, serve the file
+    res.sendFile(path.join(__dirname, 'public', 'direct-view.html'));
+});
+
 app.use(express.static('public', {
     index: false
 }));
@@ -361,10 +383,150 @@ const requirePin = (req, res, next) => {
 
 // Apply pin protection to all /api routes except pin verification
 app.use('/api', (req, res, next) => {
-    if (req.path === '/verify-pin' || req.path === '/pin-required' || req.path === '/config') {
+    if (req.path === '/verify-pin' || 
+        req.path === '/pin-required' || 
+        req.path.startsWith('/pin-required/') || 
+        req.path.startsWith('/verify-notepad-pin/') ||
+        req.path === '/config') {
         return next();
     }
     requirePin(req, res, next);
+});
+
+// Check if a notepad exists and get its PIN
+async function getNotepadPin(notepadId) {
+    try {
+        const data = await fs.readFile(NOTEPADS_FILE, 'utf8');
+        const notepads = JSON.parse(data).notepads;
+        const notepad = notepads.find(n => n.id === notepadId);
+        return notepad ? notepad.pin : null;
+    } catch (error) {
+        console.error('Error reading notepad PIN:', error);
+        return null;
+    }
+}
+
+// Set PIN for a notepad
+async function setNotepadPin(notepadId, pin) {
+    try {
+        const data = await fs.readFile(NOTEPADS_FILE, 'utf8');
+        const json = JSON.parse(data);
+        const notepad = json.notepads.find(n => n.id === notepadId);
+        if (notepad) {
+            notepad.pin = pin;
+            await fs.writeFile(NOTEPADS_FILE, JSON.stringify(json, null, 2));
+            return true;
+        }
+        return false;
+    } catch (error) {
+        console.error('Error setting notepad PIN:', error);
+        return false;
+    }
+}
+
+// Middleware to check notepad-specific authentication
+const requireNotepadAuth = async (req, res, next) => {
+    const notepadId = req.params.notepadId;
+    const authCookie = req.cookies[`${NOTEPAD_AUTH_COOKIE_PREFIX}${notepadId}`];
+    
+    if (!authCookie) {
+        return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const notepadPin = await getNotepadPin(notepadId);
+    if (!notepadPin) {
+        return res.status(404).json({ error: 'Notepad not found' });
+    }
+
+    if (!secureCompare(authCookie, notepadPin)) {
+        return res.status(401).json({ error: 'Invalid authentication' });
+    }
+
+    next();
+};
+
+// Notepad-specific PIN endpoints
+app.get('/api/pin-required/:notepadId', async (req, res) => {
+    const notepadId = req.params.notepadId;
+    const notepadPin = await getNotepadPin(notepadId);
+    
+    if (notepadPin === null) {
+        return res.status(404).json({ error: 'Notepad not found' });
+    }
+
+    res.json({
+        required: notepadPin !== undefined && notepadPin !== null,
+        length: notepadPin ? notepadPin.length : 0
+    });
+});
+
+app.post('/api/verify-notepad-pin/:notepadId', async (req, res) => {
+    const { pin } = req.body;
+    const notepadId = req.params.notepadId;
+    const ip = req.ip;
+
+    if (isLockedOut(ip)) {
+        const timeLeft = Math.ceil((LOCKOUT_TIME - (Date.now() - loginAttempts.get(ip).lastAttempt)) / 1000 / 60);
+        return res.status(429).json({
+            error: `Too many attempts. Please try again in ${timeLeft} minutes.`
+        });
+    }
+
+    if (!isValidPin(pin)) {
+        return res.status(400).json({ error: 'Invalid PIN format' });
+    }
+
+    const notepadPin = await getNotepadPin(notepadId);
+    if (!notepadPin) {
+        return res.status(404).json({ error: 'Notepad not found' });
+    }
+
+    if (secureCompare(pin, notepadPin)) {
+        resetAttempts(ip);
+        res.cookie(`${NOTEPAD_AUTH_COOKIE_PREFIX}${notepadId}`, pin, {
+            maxAge: COOKIE_MAX_AGE,
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict'
+        });
+        res.json({ success: true });
+    } else {
+        recordAttempt(ip);
+        const attempts = loginAttempts.get(ip);
+        const attemptsLeft = MAX_ATTEMPTS - attempts.count;
+        res.status(401).json({
+            success: false,
+            attemptsLeft
+        });
+    }
+});
+
+// Add PIN to notepad endpoint
+app.post('/api/notepads/:notepadId/pin', requirePin, async (req, res) => {
+    const { pin } = req.body;
+    const notepadId = req.params.notepadId;
+
+    if (!isValidPin(pin)) {
+        return res.status(400).json({ error: 'Invalid PIN format' });
+    }
+
+    const success = await setNotepadPin(notepadId, pin);
+    if (success) {
+        res.json({ success: true });
+    } else {
+        res.status(404).json({ error: 'Notepad not found' });
+    }
+});
+
+// Remove PIN from notepad endpoint
+app.delete('/api/notepads/:notepadId/pin', requirePin, async (req, res) => {
+    const notepadId = req.params.notepadId;
+    const success = await setNotepadPin(notepadId, null);
+    if (success) {
+        res.json({ success: true });
+    } else {
+        res.status(404).json({ error: 'Notepad not found' });
+    }
 });
 
 // Ensure data directory exists
@@ -470,14 +632,28 @@ app.put('/api/notepads/:id', async (req, res) => {
 });
 
 // Get notes for a specific notepad
-app.get('/api/notes/:id', async (req, res) => {
+app.get('/api/notes/:id', async (req, res, next) => {
     try {
-        const { id } = req.params;
-        const notePath = path.join(DATA_DIR, `${id}.txt`);
+        const notepadId = req.params.id;
+        const notepadPin = await getNotepadPin(notepadId);
+        
+        // Check if user has master PIN authentication
+        const masterAuthCookie = req.cookies[COOKIE_NAME];
+        const hasMasterAuth = masterAuthCookie && PIN && secureCompare(masterAuthCookie, PIN);
+        
+        // If notepad has PIN protection and user doesn't have master auth
+        if (notepadPin && !hasMasterAuth) {
+            const authCookie = req.cookies[`${NOTEPAD_AUTH_COOKIE_PREFIX}${notepadId}`];
+            if (!authCookie || !secureCompare(authCookie, notepadPin)) {
+                return res.status(401).json({ error: 'Authentication required' });
+            }
+        }
+
+        // If no PIN, or has notepad PIN auth, or has master auth, proceed
+        const notePath = path.join(DATA_DIR, `${notepadId}.txt`);
         const notes = await fs.readFile(notePath, 'utf8').catch(() => '');
         
-        // Set loaded notes as the current page in cookies.
-        res.cookie(PAGE_HISTORY_COOKIE, id, {
+        res.cookie(PAGE_HISTORY_COOKIE, notepadId, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'strict',
@@ -491,11 +667,26 @@ app.get('/api/notes/:id', async (req, res) => {
 });
 
 // Save notes for a specific notepad
-app.post('/api/notes/:id', async (req, res) => {
+app.post('/api/notes/:id', async (req, res, next) => {
     try {
-        const { id } = req.params;
+        const notepadId = req.params.id;
+        const notepadPin = await getNotepadPin(notepadId);
+        
+        // Check if user has master PIN authentication
+        const masterAuthCookie = req.cookies[COOKIE_NAME];
+        const hasMasterAuth = masterAuthCookie && PIN && secureCompare(masterAuthCookie, PIN);
+        
+        // If notepad has PIN protection and user doesn't have master auth
+        if (notepadPin && !hasMasterAuth) {
+            const authCookie = req.cookies[`${NOTEPAD_AUTH_COOKIE_PREFIX}${notepadId}`];
+            if (!authCookie || !secureCompare(authCookie, notepadPin)) {
+                return res.status(401).json({ error: 'Authentication required' });
+            }
+        }
+
+        // If no PIN, or has notepad PIN auth, or has master auth, proceed
         await ensureDataDir();
-        await fs.writeFile(path.join(DATA_DIR, `${id}.txt`), req.body.content);
+        await fs.writeFile(path.join(DATA_DIR, `${notepadId}.txt`), req.body.content);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Error saving notes' });

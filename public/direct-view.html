@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title id="page-title">DumbPad - Direct View</title>
+    <link rel="icon" type="image/svg+xml" href="Assets/dumbpad.svg">
+    <link rel="alternate icon" type="image/png" href="Assets/dumbpad.png">
+    <link rel="apple-touch-icon" href="Assets/dumbpad.png">
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        /* Direct view specific styles */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            background-color: var(--header-bg);
+            border-radius: 12px;
+            margin-bottom: 1rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            position: relative;
+            gap: 1rem;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 2rem;
+            font-weight: 600;
+            color: var(--text-color);
+            text-align: center;
+            flex: 1;
+            order: 0;
+        }
+
+        .notepad-name {
+            font-size: 0.875rem;
+            color: var(--text-color);
+            opacity: 0.8;
+            margin: 0;
+            min-width: fit-content;
+            white-space: nowrap;
+            order: -1;
+        }
+
+        #themeToggle {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0.5rem;
+            color: var(--text-color);
+            border-radius: 8px;
+            transition: background-color 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: fit-content;
+            order: 1;
+        }
+
+        #themeToggle:hover {
+            background-color: var(--button-hover);
+        }
+
+        .status {
+            position: fixed;
+            bottom: 1rem;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            pointer-events: none;
+            z-index: 1000;
+        }
+        
+        .status span {
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            background-color: var(--save-status-bg);
+            color: var(--primary-color);
+            font-size: 0.875rem;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        .status span:not(:empty) {
+            opacity: 1;
+        }
+        
+        .status span.error {
+            background-color: rgba(220, 38, 38, 0.1);
+            color: #dc2626;
+        }
+        
+        .status span.visible {
+            opacity: 1;
+        }
+
+        .editor-container {
+            height: calc(100vh - 120px);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            background-color: var(--textarea-bg);
+        }
+
+        .editor {
+            width: 100%;
+            height: 100%;
+            padding: 1.5rem;
+            font-size: 1rem;
+            line-height: 1.6;
+            border: none;
+            outline: none;
+            resize: none;
+            background-color: transparent;
+            color: var(--text-color);
+            font-family: monospace;
+        }
+
+        .editor::placeholder {
+            color: var(--secondary-color);
+        }
+
+        /* Dark mode adjustments */
+        .dark-mode .editor {
+            color: var(--text-color);
+        }
+
+        .dark-mode #themeToggle {
+            color: var(--text-color);
+        }
+
+        .dark-mode .header {
+            background-color: var(--header-bg);
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                padding: 0.75rem;
+                margin-bottom: 0.5rem;
+                gap: 0.5rem;
+            }
+
+            .header h1 {
+                font-size: 1.5rem;
+                order: -1; /* Move title to top */
+            }
+
+            .notepad-controls {
+                display: flex;
+                justify-content: space-between;
+                width: 100%;
+                align-items: center;
+            }
+
+            .notepad-name {
+                order: 0;
+            }
+
+            #themeToggle {
+                order: 1;
+            }
+
+            .editor-container {
+                height: calc(100vh - 140px);
+            }
+
+            .editor {
+                padding: 1rem;
+            }
+        }
+    </style>
+</head>
+<body class="light-mode">
+    <div class="container">
+        <header class="header">
+            <div class="notepad-name">Notepad: <span id="notepadTitle">Loading...</span></div>
+            <h1 id="header-title">DumbPad</h1>
+            <button id="themeToggle" aria-label="Toggle dark mode">
+                <svg class="moon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                </svg>
+                <svg class="sun" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="5"></circle>
+                    <line x1="12" y1="1" x2="12" y2="3"></line>
+                    <line x1="12" y1="21" x2="12" y2="23"></line>
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                    <line x1="1" y1="12" x2="3" y2="12"></line>
+                    <line x1="21" y1="12" x2="23" y2="12"></line>
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                </svg>
+            </button>
+        </header>
+
+        <main>
+            <div class="editor-container">
+                <textarea id="editor" class="editor" spellcheck="false" placeholder="Loading..."></textarea>
+            </div>
+        </main>
+
+        <div id="status" class="status">
+            <span id="connectionStatus"></span>
+            <span id="saveStatus"></span>
+        </div>
+    </div>
+
+    <script type="module" src="cursor-manager.js"></script>
+    <script type="module" src="operations.js"></script>
+    <script type="module" src="collaboration.js"></script>
+    <script type="module" src="direct-view.js"></script>
+    <script>
+        // Initialize theme
+        const themeToggle = document.getElementById('themeToggle');
+        const prefersDarkScheme = window.matchMedia('(prefers-color-scheme: dark)');
+        const currentTheme = localStorage.getItem('theme');
+        
+        if (currentTheme === 'dark' || (!currentTheme && prefersDarkScheme.matches)) {
+            document.body.classList.remove('light-mode');
+            document.body.classList.add('dark-mode');
+        }
+
+        themeToggle.addEventListener('click', () => {
+            document.body.classList.toggle('dark-mode');
+            document.body.classList.toggle('light-mode');
+            const theme = document.body.classList.contains('dark-mode') ? 'dark' : 'light';
+            localStorage.setItem('theme', theme);
+        });
+    </script>
+</body>
+</html> 

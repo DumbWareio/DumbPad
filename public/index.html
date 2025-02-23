@@ -12,13 +12,26 @@
 <body class="light-mode">
     <div class="container">
         <header>
-            <div class="notepad-controls">
-                <button id="new-notepad" class="icon-button" aria-label="Create new notepad">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="12" y1="5" x2="12" y2="19"></line>
-                        <line x1="5" y1="12" x2="19" y2="12"></line>
+            <div class="top-row">
+                <h1 id="header-title">DumbPad</h1>
+                <button id="theme-toggle" aria-label="Toggle dark mode">
+                    <svg class="moon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
+                    <svg class="sun" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="5"></circle>
+                        <line x1="12" y1="1" x2="12" y2="3"></line>
+                        <line x1="12" y1="21" x2="12" y2="23"></line>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                        <line x1="1" y1="12" x2="3" y2="12"></line>
+                        <line x1="21" y1="12" x2="23" y2="12"></line>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
                     </svg>
                 </button>
+            </div>
+            <div class="notepad-controls">
                 <div class="select-wrapper">
                     <select id="notepad-selector">
                     </select>
@@ -27,19 +40,18 @@
                             <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
                         </svg>
                     </button>
-                    <button id="download-notepad" class="icon-button" aria-label="Download current notepad">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                            <polyline points="7 10 12 15 17 10"></polyline>
-                            <line x1="12" y1="15" x2="12" y2="3"></line>
-                        </svg>
+                    <button id="download-notepad" class="control-btn" title="Download notepad">
+                        <span class="icon">⭳</span>
                     </button>
-                    <button id="print-notepad" class="icon-button" aria-label="Print current notepad">
+                    <button id="print-notepad" class="control-btn" title="Print notepad">
                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="6 9 6 2 18 2 18 9"></polyline>
                             <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
                             <rect x="6" y="14" width="12" height="8"></rect>
                         </svg>
+                    </button>
+                    <button id="share-notepad" class="control-btn" title="Share notepad">
+                        <span class="icon">🔗</span>
                     </button>
                     <button id="delete-notepad" class="icon-button" aria-label="Delete current notepad">
                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -50,23 +62,6 @@
                     </button>
                 </div>
             </div>
-            <h1 id="header-title">DumbPad</h1>
-            <button id="theme-toggle" aria-label="Toggle dark mode">
-                <svg class="moon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-                </svg>
-                <svg class="sun" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="5"></circle>
-                    <line x1="12" y1="1" x2="12" y2="3"></line>
-                    <line x1="12" y1="21" x2="12" y2="23"></line>
-                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-                    <line x1="1" y1="12" x2="3" y2="12"></line>
-                    <line x1="21" y1="12" x2="23" y2="12"></line>
-                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-                </svg>
-            </button>
         </header>
         <main>
             <div class="editor-container">
@@ -95,6 +90,71 @@
             </div>
         </div>
     </div>
+
+    <!-- Share Modal -->
+    <div id="share-modal" class="modal">
+        <div class="modal-content share-modal-content">
+            <div class="modal-header">
+                <h2>Share Notepad</h2>
+                <button id="share-close" class="modal-close" aria-label="Close modal">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="share-section">
+                    <label for="share-input">Share Link</label>
+                    <div class="share-input-group">
+                        <input type="text" id="share-input" readonly>
+                        <button id="share-copy" class="primary-button">
+                            <span class="button-text">Copy</span>
+                            <svg class="copy-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="share-section">
+                    <label>Access Protection</label>
+                    <div class="pin-status" id="pin-status">
+                        <span class="status-icon">🔓</span>
+                        <span class="status-text">No PIN set</span>
+                    </div>
+                    <div class="pin-input-container" id="pin-input-container" style="display: none;">
+                        <div class="pin-digits">
+                            <input type="password" class="pin-digit" maxlength="1" pattern="[0-9]" inputmode="numeric" autocomplete="off">
+                            <input type="password" class="pin-digit" maxlength="1" pattern="[0-9]" inputmode="numeric" autocomplete="off">
+                            <input type="password" class="pin-digit" maxlength="1" pattern="[0-9]" inputmode="numeric" autocomplete="off">
+                            <input type="password" class="pin-digit" maxlength="1" pattern="[0-9]" inputmode="numeric" autocomplete="off">
+                        </div>
+                    </div>
+                    <div class="pin-management">
+                        <button id="share-set-pin" class="secondary-button pin-action-button">
+                            <span class="button-text">Set Access PIN</span>
+                            <svg class="lock-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                            </svg>
+                        </button>
+                        <button id="share-remove-pin" class="secondary-button pin-action-button" style="display: none;">
+                            <span class="button-text">Remove PIN</span>
+                            <svg class="unlock-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                                <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="share-done" class="secondary-button">Done</button>
+            </div>
+        </div>
+    </div>
+
     <script src="app.js" type="module"></script>
 </body>
 </html> 

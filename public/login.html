@@ -46,6 +46,18 @@
             let pinDigits = [];
             let pinLength = 4;
             let baseUrl = '';
+            let noteId = null;
+            let redirectUrl = null;
+
+            // Get URL parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            redirectUrl = urlParams.get('redirect');
+            if (redirectUrl) {
+                // Handle relative URLs by prepending origin
+                const fullUrl = redirectUrl.startsWith('http') ? redirectUrl : `${window.location.origin}${redirectUrl}`;
+                const redirectUrlParams = new URLSearchParams(new URL(fullUrl).search);
+                noteId = redirectUrlParams.get('note');
+            }
 
             // Create PIN input boxes
             function createPinInputs(length) {
@@ -172,14 +184,18 @@
             // Check if PIN is required
             const checkPinRequired = async () => {
                 try {
-                    const response = await fetch(`${baseUrl}/api/pin-required`);
+                    const endpoint = noteId ? 
+                        `${baseUrl}/api/pin-required/${noteId}` : 
+                        `${baseUrl}/api/pin-required`;
+
+                    const response = await fetch(endpoint);
                     const { required, length } = await response.json();
                     if (required) {
                         pinLength = length;
                         createPinInputs(length);
                         pinDigits[0].focus();
                     } else {
-                        window.location.href = `${baseUrl}/`;
+                        window.location.href = redirectUrl || `${baseUrl}/`;
                     }
                 } catch (err) {
                     console.error('Error checking PIN requirement:', err);
@@ -189,7 +205,11 @@
             // Verify PIN
             const verifyPin = async (pin) => {
                 try {
-                    const response = await fetch(`${baseUrl}/api/verify-pin`, {
+                    const endpoint = noteId ? 
+                        `${baseUrl}/api/verify-notepad-pin/${noteId}` : 
+                        `${baseUrl}/api/verify-pin`;
+
+                    const response = await fetch(endpoint, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -201,7 +221,8 @@
                     const data = await response.json();
                     if (data.success) {
                         pinError.textContent = '';
-                        window.location.href = `${baseUrl}/`;
+                        // Redirect to the original URL if it exists, otherwise go to home
+                        window.location.href = redirectUrl || `${baseUrl}/`;
                     } else {
                         if (response.status === 429) {
                             pinError.textContent = data.error;

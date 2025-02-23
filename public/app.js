@@ -8,18 +8,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const themeToggle = document.getElementById('theme-toggle');
     const saveStatus = document.getElementById('save-status');
     const notepadSelector = document.getElementById('notepad-selector');
-    const newNotepadBtn = document.getElementById('new-notepad');
     const renameNotepadBtn = document.getElementById('rename-notepad');
     const downloadNotepadBtn = document.getElementById('download-notepad');
     const printNotepadBtn = document.getElementById('print-notepad');
     const deleteNotepadBtn = document.getElementById('delete-notepad');
+    const shareNotepadBtn = document.getElementById('share-notepad');
     const renameModal = document.getElementById('rename-modal');
     const deleteModal = document.getElementById('delete-modal');
+    const shareModal = document.getElementById('share-modal');
     const renameInput = document.getElementById('rename-input');
     const renameCancel = document.getElementById('rename-cancel');
     const renameConfirm = document.getElementById('rename-confirm');
     const deleteCancel = document.getElementById('delete-cancel');
     const deleteConfirm = document.getElementById('delete-confirm');
+    const shareInput = document.getElementById('share-input');
+    const shareDone = document.getElementById('share-done');
+    const shareCopy = document.getElementById('share-copy');
+    const shareSetPin = document.getElementById('share-set-pin');
+    const sharePinInput = document.getElementById('share-pin-input');
     
     // Theme handling
     const THEME_KEY = 'dumbpad_theme';
@@ -64,7 +70,8 @@ document.addEventListener('DOMContentLoaded', () => {
             
             notepadSelector.innerHTML = data.notepads_list.notepads
                 .map(pad => `<option value="${pad.id}"${pad.id === currentNotepadId?'selected':''}>${pad.name}</option>`)
-                .join('');
+                .join('') + 
+                `<option value="new" class="new-notepad-option">+ New Notepad</option>`;
         } catch (err) {
             console.error('Error loading notepads:', err);
             return [];
@@ -357,13 +364,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 300);
     };
 
+    // Update notepad selector event listener
     notepadSelector.addEventListener('change', (e) => {
+        if (e.target.value === 'new') {
+            // Reset selection to previous value
+            e.target.value = currentNotepadId;
+            // Create new notepad
+            createNotepad();
+            return;
+        }
         currentNotepadId = e.target.value;
         collaborationManager.currentNotepadId = currentNotepadId;
         loadNotes(currentNotepadId);
     });
-
-    newNotepadBtn.addEventListener('click', createNotepad);
 
     renameNotepadBtn.addEventListener('click', () => {
         const currentNotepad = notepadSelector.options[notepadSelector.selectedIndex];
@@ -539,6 +552,185 @@ document.addEventListener('DOMContentLoaded', () => {
 
     downloadNotepadBtn.addEventListener('click', downloadNotepad);
     printNotepadBtn.addEventListener('click', printNotepad);
+
+    // Share notepad functionality
+    const showShareDialog = async () => {
+        const notepadId = notepadSelector.value;
+        const directUrl = `${window.location.origin}/direct-view.html?note=${notepadId}`;
+        shareInput.value = directUrl;
+        shareModal.style.display = 'block';
+
+        // Check if notepad has a PIN
+        try {
+            const response = await fetchWithPin(`/api/pin-required/${notepadId}`);
+            const data = await response.json();
+            const pinStatus = document.getElementById('pin-status');
+            const setPinButton = document.getElementById('share-set-pin');
+            const removePinButton = document.getElementById('share-remove-pin');
+
+            if (data.required) {
+                pinStatus.innerHTML = `
+                    <span class="status-icon">🔒</span>
+                    <span class="status-text">PIN protected</span>
+                `;
+                setPinButton.style.display = 'none';
+                removePinButton.style.display = 'block';
+            } else {
+                pinStatus.innerHTML = `
+                    <span class="status-icon">🔓</span>
+                    <span class="status-text">No PIN set</span>
+                `;
+                setPinButton.style.display = 'block';
+                removePinButton.style.display = 'none';
+            }
+        } catch (error) {
+            console.error('Error checking PIN status:', error);
+        }
+    };
+
+    const removeNotepadPin = async () => {
+        const notepadId = notepadSelector.value;
+        try {
+            const response = await fetchWithPin(`/api/notepads/${notepadId}/pin`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (response.ok) {
+                // Update PIN status UI
+                const pinStatus = document.getElementById('pin-status');
+                const setPinButton = document.getElementById('share-set-pin');
+                const removePinButton = document.getElementById('share-remove-pin');
+
+                pinStatus.innerHTML = `
+                    <span class="status-icon">🔓</span>
+                    <span class="status-text">No PIN set</span>
+                `;
+                setPinButton.style.display = 'block';
+                removePinButton.style.display = 'none';
+            } else {
+                alert('Failed to remove PIN');
+            }
+        } catch (error) {
+            console.error('Error removing PIN:', error);
+            alert('Failed to remove PIN');
+        }
+    };
+
+    // Add event listeners for PIN management
+    document.getElementById('share-set-pin').addEventListener('click', async () => {
+        const pinInputContainer = document.getElementById('pin-input-container');
+        
+        if (pinInputContainer.style.display === 'block') {
+            // If PIN input is visible, try to set the PIN
+            const pinDigits = Array.from(document.querySelectorAll('.pin-digit')).map(input => input.value);
+            const pin = pinDigits.join('');
+            
+            if (!pin) return;
+            
+            if (!/^\d{4}$/.test(pin)) {
+                alert('PIN must be exactly 4 digits');
+                return;
+            }
+
+            try {
+                const response = await fetchWithPin(`/api/notepads/${notepadSelector.value}/pin`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ pin })
+                });
+
+                if (response.ok) {
+                    // Update PIN status UI
+                    const pinStatus = document.getElementById('pin-status');
+                    const setPinButton = document.getElementById('share-set-pin');
+                    const removePinButton = document.getElementById('share-remove-pin');
+
+                    pinStatus.innerHTML = `
+                        <span class="status-icon">🔒</span>
+                        <span class="status-text">PIN protected</span>
+                    `;
+                    setPinButton.style.display = 'none';
+                    removePinButton.style.display = 'block';
+                    pinInputContainer.style.display = 'none';
+
+                    // Clear PIN inputs
+                    document.querySelectorAll('.pin-digit').forEach(input => {
+                        input.value = '';
+                    });
+                } else {
+                    alert('Failed to set PIN');
+                }
+            } catch (error) {
+                console.error('Error setting PIN:', error);
+                alert('Failed to set PIN');
+            }
+        } else {
+            // If PIN input is hidden, show it and focus first digit
+            pinInputContainer.style.display = 'block';
+            document.querySelector('.pin-digit').focus();
+        }
+    });
+
+    document.getElementById('share-remove-pin').addEventListener('click', removeNotepadPin);
+
+    // Add PIN digit input handling
+    document.querySelectorAll('.pin-digit').forEach((input, index) => {
+        input.addEventListener('input', (e) => {
+            if (e.target.value) {
+                if (index < 3) {
+                    document.querySelectorAll('.pin-digit')[index + 1].focus();
+                } else {
+                    // When last digit is entered, automatically try to set the PIN
+                    document.getElementById('share-set-pin').click();
+                }
+            }
+        });
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Backspace' && !e.target.value && index > 0) {
+                document.querySelectorAll('.pin-digit')[index - 1].focus();
+            }
+        });
+    });
+
+    // Copy share link to clipboard
+    const copyShareLink = async () => {
+        try {
+            await navigator.clipboard.writeText(shareInput.value);
+            shareCopy.textContent = 'Copied!';
+            setTimeout(() => {
+                shareCopy.textContent = 'Copy';
+            }, 2000);
+        } catch (err) {
+            console.error('Failed to copy:', err);
+            alert('Failed to copy to clipboard');
+        }
+    };
+
+    // Event listeners for share functionality
+    if (shareNotepadBtn) {
+        shareNotepadBtn.addEventListener('click', showShareDialog);
+    }
+    if (shareDone) {
+        shareDone.addEventListener('click', () => {
+            shareModal.style.display = 'none';
+        });
+    }
+    if (shareCopy) {
+        shareCopy.addEventListener('click', copyShareLink);
+    }
+
+    // Close modals when clicking outside
+    window.addEventListener('click', (e) => {
+        if (e.target === shareModal) {
+            shareModal.style.display = 'none';
+        }
+    });
 
     // Initialize the app
     const initializeApp = () => {
