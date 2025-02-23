@@ -78,7 +78,10 @@ class DirectViewManager {
 
     async checkAuthentication() {
         try {
-            if (this.DEBUG) console.log('Starting authentication check...');
+            if (this.DEBUG) {
+                console.log('Starting authentication check...');
+                console.log('Current cookies:', document.cookie);
+            }
             
             // Get site configuration first
             if (this.DEBUG) console.log('Fetching site configuration...');
@@ -99,14 +102,33 @@ class DirectViewManager {
                 return true;
             }
 
-            // Try to access with current cookie
-            if (this.DEBUG) console.log('PIN required, checking current authentication...');
-            const authCheckResponse = await this.fetchWithPin(`/api/notes/${this.noteId}`);
-            if (this.DEBUG) console.log('Auth check response:', authCheckResponse.status);
+            // Check for existing cookie
+            const cookies = document.cookie.split(';').reduce((acc, cookie) => {
+                const [key, value] = cookie.trim().split('=');
+                acc[key] = value;
+                return acc;
+            }, {});
+            const notepadCookie = cookies[`dumbpad_notepad_${this.noteId}`];
             
-            if (authCheckResponse.ok) {
-                if (this.DEBUG) console.log('Current authentication valid');
-                return true;
+            if (this.DEBUG) {
+                console.log('Checking for existing notepad cookie...');
+                console.log(`Cookie for notepad ${this.noteId}:`, notepadCookie);
+            }
+
+            // If we have a cookie, try to access
+            if (notepadCookie) {
+                if (this.DEBUG) console.log('Found existing cookie, attempting access...');
+                const authCheckResponse = await this.fetchWithPin(`/api/notes/${this.noteId}`);
+                if (this.DEBUG) console.log('Auth check response:', authCheckResponse.status);
+                
+                if (authCheckResponse.ok) {
+                    if (this.DEBUG) console.log('Current authentication valid');
+                    return true;
+                }
+                
+                // Clear invalid cookie
+                if (this.DEBUG) console.log('Cookie invalid, clearing...');
+                document.cookie = `dumbpad_notepad_${this.noteId}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
             }
 
             // If we get here, we need authentication
@@ -127,10 +149,41 @@ class DirectViewManager {
     }
 
     async fetchWithPin(url, options = {}) {
-        options.credentials = 'same-origin';
+        options.credentials = 'include';
         const fullUrl = url.startsWith('http') ? url : `${this.baseUrl}${url}`;
-        if (this.DEBUG) console.log('Fetching with PIN:', fullUrl);
-        return fetch(fullUrl, options);
+        
+        if (this.DEBUG) {
+            console.log('Fetching with PIN:', fullUrl);
+            console.log('Request options:', options);
+            console.log('Current cookies:', document.cookie);
+            
+            // Parse and log the notepad-specific cookie
+            const cookies = document.cookie.split(';').reduce((acc, cookie) => {
+                const [key, value] = cookie.trim().split('=');
+                acc[key] = value;
+                return acc;
+            }, {});
+            const notepadCookie = cookies[`dumbpad_notepad_${this.noteId}`];
+            console.log(`Notepad cookie for ${this.noteId}:`, notepadCookie);
+            console.log('All parsed cookies:', cookies);
+        }
+
+        const response = await fetch(fullUrl, options);
+        
+        if (this.DEBUG) {
+            console.log('Response status:', response.status);
+            console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+            console.log('Cookies after response:', document.cookie);
+            if (!response.ok) {
+                console.log('Request failed:', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    url: response.url
+                });
+            }
+        }
+        
+        return response;
     }
 
     async loadNotepad() {

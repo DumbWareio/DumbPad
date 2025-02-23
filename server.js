@@ -171,10 +171,26 @@ app.set('trust proxy', 1);
 
 // CORS configuration
 const corsOptions = {
-    origin: process.env.NODE_ENV === 'production' ? [BASE_URL, 'https://pad.000169.xyz'] : true,
+    origin: function(origin, callback) {
+        // Allow requests with no origin (like mobile apps, curl, etc)
+        if (!origin) return callback(null, true);
+        
+        // In development, allow localhost with any port
+        if (process.env.NODE_ENV !== 'production') {
+            return callback(null, true);
+        }
+        
+        // In production, only allow BASE_URL
+        if (origin === BASE_URL) {
+            return callback(null, origin);
+        }
+        
+        callback(new Error('Not allowed by CORS'));
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Cookie', 'Set-Cookie'],
+    exposedHeaders: ['Set-Cookie']
 };
 
 // Brute force protection
@@ -483,12 +499,39 @@ app.post('/api/verify-notepad-pin/:notepadId', async (req, res) => {
 
     if (secureCompare(pin, notepadPin)) {
         resetAttempts(ip);
-        res.cookie(`${NOTEPAD_AUTH_COOKIE_PREFIX}${notepadId}`, pin, {
+        
+        // Set cookie with explicit domain and path
+        const cookieName = `${NOTEPAD_AUTH_COOKIE_PREFIX}${notepadId}`;
+        
+        // Log the request origin and headers
+        console.log('Request origin:', req.get('origin'));
+        console.log('Request headers:', req.headers);
+        
+        // Set the cookie with development-friendly settings
+        const cookieOptions = {
             maxAge: COOKIE_MAX_AGE,
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict'
-        });
+            sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+            path: '/'
+        };
+
+        // Only set domain in production if specified
+        if (process.env.NODE_ENV === 'production' && process.env.COOKIE_DOMAIN) {
+            cookieOptions.domain = process.env.COOKIE_DOMAIN;
+        }
+
+        console.log('Setting cookie with options:', cookieOptions);
+        res.cookie(cookieName, pin, cookieOptions);
+
+        // Set CORS headers explicitly
+        res.header('Access-Control-Allow-Credentials', 'true');
+        res.header('Access-Control-Allow-Origin', req.get('origin') || '*');
+        res.header('Access-Control-Expose-Headers', 'Set-Cookie');
+
+        // Log response headers before sending
+        console.log('Setting response headers:', res.getHeaders());
+
         res.json({ success: true });
     } else {
         recordAttempt(ip);

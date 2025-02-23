@@ -205,9 +205,14 @@
             // Verify PIN
             const verifyPin = async (pin) => {
                 try {
+                    console.log('Verifying PIN for notepad:', noteId);
+                    console.log('Current cookies before verification:', document.cookie);
+                    
                     const endpoint = noteId ? 
                         `${baseUrl}/api/verify-notepad-pin/${noteId}` : 
                         `${baseUrl}/api/verify-pin`;
+
+                    console.log('Using verification endpoint:', endpoint);
 
                     const response = await fetch(endpoint, {
                         method: 'POST',
@@ -215,15 +220,46 @@
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({ pin }),
-                        credentials: 'same-origin'
+                        credentials: 'include'
                     });
 
+                    console.log('Verification response status:', response.status);
+                    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+
                     const data = await response.json();
+                    console.log('Verification response:', data);
+                    
                     if (data.success) {
                         pinError.textContent = '';
-                        // Redirect to the original URL if it exists, otherwise go to home
+                        console.log('PIN verified successfully');
+                        
+                        // Wait for cookie to be set
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                        console.log('Cookies after verification:', document.cookie);
+                        
+                        // Double check cookie before redirect
+                        const cookieName = `dumbpad_notepad_${noteId}`;
+                        const cookies = document.cookie.split(';').reduce((acc, cookie) => {
+                            const [key, value] = cookie.trim().split('=');
+                            acc[key] = value;
+                            return acc;
+                        }, {});
+                        
+                        console.log('Parsed cookies:', cookies);
+                        console.log('Looking for cookie:', cookieName);
+                        
+                        if (!cookies[cookieName] && noteId) {
+                            console.error('Cookie not set after verification');
+                            pinError.textContent = 'Error setting authentication cookie';
+                            clearPinInputs();
+                            return;
+                        }
+                        
+                        console.log('Redirecting to:', redirectUrl || `${baseUrl}/`);
+                        console.log('Final cookies before redirect:', document.cookie);
                         window.location.href = redirectUrl || `${baseUrl}/`;
                     } else {
+                        console.log('PIN verification failed:', data);
                         if (response.status === 429) {
                             pinError.textContent = data.error;
                             setPinInputsDisabled(true);
