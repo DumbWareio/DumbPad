@@ -28,6 +28,7 @@ A stupid simple, no auth (unless you want it!), modern notepad application with 
 - Optional PIN protection (4-10 digits)
 - File-based storage
 - Data persistence across updates
+- Markdown Formatting
 
 ## Quick Start
 
@@ -116,6 +117,7 @@ docker run -p 3000:3000 -v "${PWD}\data:/app/data" dumbwareio/dumbpad:latest
 * 🔒 Optional PIN protection
 * 📱 Mobile-friendly interface
 * 🗂️ Multiple notepads
+* 📄 Markdown Formatting
 * ⬇️ Download notes as text files
 * 🖨️ Print functionality
 * 🔄 Real-time saving

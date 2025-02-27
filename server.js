@@ -245,6 +245,10 @@ app.use(cookieParser());
 app.use(express.static('public', {
     index: false
 }));
+// Serve the marked library to clients
+app.use('/js/marked', express.static(
+    path.join(__dirname, 'node_modules/marked/lib')
+  ));
 
 // Main app route with PIN check
 app.get('/', (req, res) => {

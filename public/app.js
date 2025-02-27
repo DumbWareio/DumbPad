@@ -1,6 +1,13 @@
 import { OperationsManager, OperationType } from './operations.js';
 import { CollaborationManager } from './collaboration.js';
 import { CursorManager } from './cursor-manager.js';
+import { marked } from '/js/marked/marked.esm.js';
+
+// Set up markdown parser
+marked.setOptions({
+    breaks: true,
+    gfm: true
+});
 
 document.addEventListener('DOMContentLoaded', () => {
     const DEBUG = false;
@@ -12,6 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const renameNotepadBtn = document.getElementById('rename-notepad');
     const downloadNotepadBtn = document.getElementById('download-notepad');
     const printNotepadBtn = document.getElementById('print-notepad');
+    const previewMarkdownBtn = document.getElementById('preview-markdown');
     const deleteNotepadBtn = document.getElementById('delete-notepad');
     const renameModal = document.getElementById('rename-modal');
     const deleteModal = document.getElementById('delete-modal');
@@ -20,6 +28,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const renameConfirm = document.getElementById('rename-confirm');
     const deleteCancel = document.getElementById('delete-cancel');
     const deleteConfirm = document.getElementById('delete-confirm');
+    // Download modal elements
+    const downloadModal = document.getElementById('download-modal');
+    const downloadTxt = document.getElementById('download-txt');
+    const downloadMd = document.getElementById('download-md');
+    const downloadCancel = document.getElementById('download-cancel');
+    // Inject markdown preview pane
+    const previewPane = document.createElement('div');
+    previewPane.id = 'preview-pane';
+    previewPane.className = 'preview-container';
+    const editorContainer = editor.parentElement;
+    editorContainer.appendChild(previewPane);
+    let isPreviewMode = false;
     
     // Theme handling
     const THEME_KEY = 'dumbpad_theme';
@@ -78,6 +98,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             editor.value = data.content;
             previousEditorValue = data.content;
+            
+            // Update preview if in preview mode
+            if (isPreviewMode) {
+                previewPane.innerHTML = marked.parse(data.content);
+            }
         } catch (err) {
             console.error('Error loading notes:', err);
         }
@@ -230,6 +255,11 @@ document.addEventListener('DOMContentLoaded', () => {
         previousEditorValue = target.value;
         debouncedSave(target.value);
         collaborationManager.updateLocalCursor();
+        
+        // Update markdown preview in real-time if in preview mode
+        if (isPreviewMode) {
+            previewPane.innerHTML = marked.parse(target.value);
+        }
     });
 
     // Handle composition events (for IME input)
@@ -256,7 +286,38 @@ document.addEventListener('DOMContentLoaded', () => {
         
         debouncedSave(target.value);
         collaborationManager.updateLocalCursor();
+        
+        // Update markdown preview if in preview mode
+        if (isPreviewMode) {
+            previewPane.innerHTML = marked.parse(target.value);
+        }
     });
+
+    // Function to toggle between edit and preview modes
+    const toggleMarkdownPreview = () => {
+        isPreviewMode = !isPreviewMode;
+        
+        if (isPreviewMode) {
+            // Render and show the markdown
+            previewPane.innerHTML = marked.parse(editor.value);
+            previewPane.style.display = 'block';
+            editor.style.display = 'none';
+            
+            // Apply the same styling as the editor
+            previewPane.style.backgroundColor = window.getComputedStyle(editor).backgroundColor;
+            previewPane.style.color = window.getComputedStyle(editor).color;
+            previewPane.style.padding = window.getComputedStyle(editor).padding;
+            previewMarkdownBtn.classList.add('active');
+
+        } else {
+            previewPane.style.display = 'none';
+            editor.style.display = 'block';
+            previewMarkdownBtn.classList.remove('active');
+        }
+    };
+    
+    // Add event listener for the markdown toggle button
+    previewMarkdownBtn.addEventListener('click', toggleMarkdownPreview);
 
     // Create new notepad
     const createNotepad = async () => {
@@ -269,6 +330,11 @@ document.addEventListener('DOMContentLoaded', () => {
             collaborationManager.currentNotepadId = currentNotepadId;
             editor.value = '';
             previousEditorValue = '';
+            
+            // Clear preview if in preview mode
+            if (isPreviewMode) {
+                previewPane.innerHTML = '';
+            }
             
             if (collaborationManager.ws && collaborationManager.ws.readyState === WebSocket.OPEN) {
                 collaborationManager.ws.send(JSON.stringify({
@@ -467,17 +533,44 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Download current notepad
-    const downloadNotepad = () => {
+    // Show download modal
+    downloadNotepadBtn.addEventListener('click', () => {
+        downloadModal.classList.add('visible');
+    });
+
+    // Cancel download
+    downloadCancel.addEventListener('click', () => {
+        downloadModal.classList.remove('visible');
+    });
+
+    // Download as TXT
+    downloadTxt.addEventListener('click', () => {
+        downloadNotepad('txt');
+        downloadModal.classList.remove('visible');
+    });
+
+    // Download as MD
+    downloadMd.addEventListener('click', () => {
+        downloadNotepad('md');
+        downloadModal.classList.remove('visible');
+    });
+
+    // Download file with specified extension
+    const downloadNotepad = (extension) => {
         const notepadName = notepadSelector.options[notepadSelector.selectedIndex].text;
         const content = editor.value;
+        
+        // Strip any existing extension from notepad name
+        const baseName = notepadName.includes('.')
+            ? notepadName.substring(0, notepadName.lastIndexOf('.'))
+            : notepadName;
         
         const blob = new Blob([content], { type: 'text/plain' });
         const url = window.URL.createObjectURL(blob);
         
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${notepadName}.txt`;
+        a.download = `${baseName}.${extension}`;
         document.body.appendChild(a);
         a.click();
         
@@ -497,6 +590,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const content = editor.value;
         
         const printWindow = window.open('', '_blank');
+
+        const formattedContent = notepadName.toLowerCase().endsWith('.md') || isPreviewMode
+            ? marked.parse(content)
+            : content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+        
         printWindow.document.write(`
             <!DOCTYPE html>
             <html>
@@ -517,7 +615,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </style>
             </head>
             <body>
-                ${content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\\n/g, '<br>')}
+                ${formattedContent}
             </body>
             </html>
         `);
@@ -537,7 +635,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 2000);
     };
 
-    downloadNotepadBtn.addEventListener('click', downloadNotepad);
     printNotepadBtn.addEventListener('click', printNotepad);
 
     // Initialize the app
@@ -561,4 +658,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Start the app
     initializeApp();
-}); 
+});
