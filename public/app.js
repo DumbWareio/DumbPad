@@ -304,6 +304,7 @@ document.addEventListener('DOMContentLoaded', () => {
             previewContainer.style.display = 'none';
             editorContainer.style.display = 'block';
             previewMarkdownBtn.classList.remove('active');
+            editor.focus();
             statusManager.show('Markdown Preview Off', 'error');
         }
 
@@ -426,24 +427,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert('Cannot delete the default notepad');
                 return;
             }
-
+            
             const response = await fetchWithPin(`/api/notepads/${currentNotepadId}`, {
                 method: 'DELETE',
                 headers: {
                     'Content-Type': 'application/json'
                 }
             });
-
+            
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.error || 'Failed to delete notepad');
             }
-
+            
             await loadNotepads();
-            currentNotepadId = 'default';
-            collaborationManager.currentNotepadId = currentNotepadId;
-            notepadSelector.value = currentNotepadId;
-            await loadNotes(currentNotepadId);
+
+            // select previous notepad
+            selectNextNotepad(false);
             
             if (collaborationManager.ws && collaborationManager.ws.readyState === WebSocket.OPEN) {
                 collaborationManager.ws.send(JSON.stringify({
@@ -532,11 +532,27 @@ document.addEventListener('DOMContentLoaded', () => {
         statusManager.show('Printing...');
     };
 
+    const selectNextNotepad = (forward = true) => {
+        const options = notepadSelector.options;
+        const currentIndex = notepadSelector.selectedIndex;
+
+        let newIndex;
+        if (forward)
+            newIndex = (currentIndex + 1) % options.length;
+        else // backwards
+            newIndex = (currentIndex - 1 + options.length) % options.length;
+
+        notepadSelector.selectedIndex = newIndex;
+        // the change event listener should handle the logic for loading notes
+        notepadSelector.dispatchEvent(new Event('change'));
+    }
+
     const addNotepadControlsEventListeners = () => {
         notepadSelector.addEventListener('change', (e) => {
             currentNotepadId = e.target.value;
             collaborationManager.currentNotepadId = currentNotepadId;
             loadNotes(currentNotepadId);
+            editor.focus();
         });
     
         newNotepadBtn.addEventListener('click', createNotepad);
@@ -574,6 +590,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             deleteModal.classList.add('visible');
+            deleteCancel.focus();
         });
         deleteCancel.addEventListener('click', () => {
             deleteModal.classList.remove('visible');
@@ -584,6 +601,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
         downloadNotepadBtn.addEventListener('click', () => {
             downloadModal.classList.add('visible');
+            downloadCancel.focus();
         });
         downloadCancel.addEventListener('click', () => {
             downloadModal.classList.remove('visible');
@@ -637,6 +655,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     case 'x': {
                         e.preventDefault();
                         deleteNotepadBtn.click();
+                        break;
+                    }
+                    case 'ArrowUp': {
+                        e.preventDefault();
+                        selectNextNotepad(false); // selects previous notepad
+                        break;
+                    }
+                    case 'ArrowDown': {
+                        e.preventDefault();
+                        selectNextNotepad();
                         break;
                     }
                     default:
