@@ -29,6 +29,7 @@ A stupid simple, no auth (unless you want it!), modern notepad application with 
 - File-based storage
 - Data persistence across updates
 - Markdown Formatting
+- Fuzzy Search (by filename and file contents)
 
 ## Quick Start
 
@@ -118,7 +119,8 @@ docker run -p 3000:3000 -v "${PWD}\data:/app/data" dumbwareio/dumbpad:latest
 * 📱 Mobile-friendly interface
 * 🗂️ Multiple notepads
 * 📄 Markdown Formatting
-* ⬇️ Download notes as text files
+* ⬇️ Download notes as text or markdown files
+* 🔍 Fuzzy Search by name or contents
 * 🖨️ Print functionality
 * 🔄 Real-time saving
 * ⚡ Zero dependencies on client-side
@@ -171,6 +173,7 @@ docker run -p 3000:3000 -v "${PWD}\data:/app/data" dumbwareio/dumbpad:latest
 * cookie-parser: Cookie handling
 * express-rate-limit: Rate limiting
 * marked: Markdown formatting
+* fuse.js: Fuzzy searching
 
 
 The `data` directory contains:
@@ -188,6 +191,7 @@ The `data` directory contains:
 - Create multiple notepads with the + button.
 - Download notepads as .txt or .md files.
 - Hover over notepad controls to view tooltips of keyboard shortcuts
+- Press `Ctrl+K` (or `Cmd+S`) to open fuzzy search
 - If PIN protection is enabled, you'll need to enter the PIN to access the app.
 
 ## Technical Details

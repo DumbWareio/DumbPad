@@ -2,6 +2,7 @@ import { OperationsManager, OperationType } from './operations.js';
 import { CollaborationManager } from './collaboration.js';
 import { CursorManager } from './cursor-manager.js';
 import { StatusManager } from './status.js';
+import SearchManager from './search.js';
 import { marked } from '/js/marked/marked.esm.js';
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -76,7 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 collaborationManager.currentNotepadId = currentNotepadId;
             }
             
-            notepadSelector.innerHTML = data.notepads_list.notepads
+            notepadSelector.innerHTML = data.notepads_list
                 .map(pad => `<option value="${pad.id}"${pad.id === currentNotepadId?'selected':''}>${pad.name}</option>`)
                 .join('');
         } catch (err) {
@@ -90,8 +91,8 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const response = await fetchWithPin(`/api/notes/${notepadId}`);
             const data = await response.json();
+            previousEditorValue = editor.value;
             editor.value = data.content;
-            previousEditorValue = data.content;
             
             if (isPreviewMode) {
                 // Update preview if in preview mode
@@ -532,27 +533,58 @@ document.addEventListener('DOMContentLoaded', () => {
         statusManager.show('Printing...');
     };
 
-    const selectNextNotepad = (forward = true) => {
+    const getNotepadIndexById = (id) => {
+        // Find the index of the option with the matching id
+        const options = notepadSelector.options;
+        let newIndex = -1; // Initialize to -1 (not found)
+
+        for (let i = 0; i < options.length; i++) {
+            if (options[i].value === id) {
+                newIndex = i;
+                break; // Found the index, exit the loop
+            }
+        }
+
+        // Update the selectedIndex if found
+        if (newIndex !== -1) return notepadSelector.selectedIndex = newIndex;
+        else {
+            console.warn(`Notepad with id '${id}' not found in selector.`);
+            return -1;
+        }
+    }
+
+    /* IMPORTANT
+    this loadNotes is async so this function must be awaited 
+    or else autosave can overwrite other notepads with previous editor content */
+    const selectNotepad = async (id) => {
+        currentNotepadId = id;
+        collaborationManager.currentNotepadId = currentNotepadId;
+        await loadNotes(currentNotepadId);
+        editor.focus();
+
+        notepadSelector.selectedIndex = getNotepadIndexById(id);
+    }
+
+    const getNextNotepadIndex = (forward = true) => {
         const options = notepadSelector.options;
         const currentIndex = notepadSelector.selectedIndex;
-
         let newIndex;
         if (forward)
             newIndex = (currentIndex + 1) % options.length;
         else // backwards
             newIndex = (currentIndex - 1 + options.length) % options.length;
 
-        notepadSelector.selectedIndex = newIndex;
-        // the change event listener should handle the logic for loading notes
-        notepadSelector.dispatchEvent(new Event('change'));
+        return newIndex;
+    }
+
+    const selectNextNotepad = async (forward = true) => {
+        const newIndex = getNextNotepadIndex(forward);
+        await selectNotepad(notepadSelector[newIndex].value);
     }
 
     const addNotepadControlsEventListeners = () => {
-        notepadSelector.addEventListener('change', (e) => {
-            currentNotepadId = e.target.value;
-            collaborationManager.currentNotepadId = currentNotepadId;
-            loadNotes(currentNotepadId);
-            editor.focus();
+        notepadSelector.addEventListener('change', async (e) => {
+            await selectNotepad(e.target.value);
         });
     
         newNotepadBtn.addEventListener('click', createNotepad);
@@ -683,6 +715,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         printNotepad();
                         break;
                     }
+                    case 'k': {
+                        e.preventDefault();
+                        searchManager.openModal();
+                        break;
+                    }
                     default:
                         break;
                 }
@@ -695,6 +732,7 @@ document.addEventListener('DOMContentLoaded', () => {
         addEditorEventListeners();
         addNotepadControlsEventListeners();
         addShortcutEventListeners();
+        searchManager.addEventListeners();
     }
 
     const setupToolTips = () => {
@@ -716,6 +754,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Initialize the app
+    const searchManager = new SearchManager(fetchWithPin, selectNotepad);
     const initializeApp = () => {
         fetch(`/api/config`)
             .then(response => response.json())
