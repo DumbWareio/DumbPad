@@ -90,7 +90,6 @@ export default class SearchManager {
   }
 
   async openNotepad(id) {
-    // this.fetchWithPin(`/open?id=${id}`);
     await this.selectNotepad(id);
     this.closeModal();
   }
