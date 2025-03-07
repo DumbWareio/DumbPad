@@ -6,6 +6,7 @@ const path = require('path');
 const crypto = require('crypto');
 const cookieParser = require('cookie-parser');
 const WebSocket = require('ws');
+const Fuse = require('fuse.js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -164,6 +165,10 @@ const COOKIE_MAX_AGE = 24 * 60 * 60 * 1000; // 24 hours
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const PAGE_HISTORY_COOKIE = 'dumbpad_page_history';
 const PAGE_HISTORY_COOKIE_AGE = 365 * 24 * 60 * 60 * 1000; // 1 Year
+let notepads_cache = {
+    notepads: [],
+    index: null,
+};
 
 // Trust proxy - required for secure cookies behind a reverse proxy
 app.set('trust proxy', 1);
@@ -414,15 +419,116 @@ async function ensureDataDir() {
     }
 }
 
+async function loadNotepadsList() {
+    await ensureDataDir();
+    const data = JSON.parse(await fs.readFile(NOTEPADS_FILE, 'utf8'));
+    return data.notepads || [];
+}
+
+/* Notepad Search Functionality */
+// Load and index text files
+async function indexNotepads() {
+    console.log("Indexing notepads...");
+    notepads_cache.notepads = await loadNotepadsList();
+
+    let items = await Promise.all(notepads_cache.notepads.map(async ({ id, name }) => {
+        let content = "";
+        // console.log("id: ", id, "name:", name);
+        let filePath = path.join(DATA_DIR, `${id}.txt`);
+        try {
+            await fs.access(filePath); // Ensure file exists
+            content = await fs.readFile(filePath, 'utf8');
+        } catch (error) {
+            console.warn(`Could not read file: ${filePath}`);
+        }
+
+        return { id, name, content };
+    }));
+    
+    notepads_cache.index = new Fuse(items, { 
+        keys: ["name", "content"], 
+        threshold: 0.38,        // lower thresholds mean stricter matching
+        minMatchCharLength: 3,  // Ensures partial words can be matched
+        ignoreLocation: true,    // Allows searching across larger texts
+        includeScore: true,      // Useful for debugging relevance 
+        includeMatches: true
+    });
+
+    // console.log(notepads_cache); // uncomment to debug
+}
+
+// Search function using cache
+function searchNotepads(query) {
+    if (!notepads_cache.index) indexNotepads();
+    
+    const results = notepads_cache.index.search(query).map(({ item }) => {
+        const isFilenameMatch = item.name.toLowerCase().includes(query.toLowerCase());
+        let truncatedContent = item.content;
+        
+        if (!isFilenameMatch) {
+            const lowerContent = item.content.toLowerCase();
+            const matchIndex = lowerContent.indexOf(query.toLowerCase());
+
+            if (matchIndex !== -1) {
+                let start = matchIndex;
+                let end = matchIndex + query.length;
+
+                // Move start back up to 3 spaces before
+                let spaceCount = 0;
+                while (start > 0 && spaceCount < 3) {
+                    if (lowerContent[start] === ' ') spaceCount++;
+                    start--;
+                }
+                start = Math.max(0, start); // Ensure start doesn't go negative
+
+                // Move end forward until at least 25 characters are reached
+                while (end < lowerContent.length && (end - start) < 25) {
+                    end++;
+                }
+
+                // Extract snippet
+                truncatedContent = item.content.substring(start, end).trim();
+                // Add ellipsis to beginning if we truncated from somewhere
+                if (start > 0) truncatedContent = `...${truncatedContent}`;
+                // Add ellipsis to end if there is more content after the snippet
+                if (end < item.content.length) truncatedContent = `${truncatedContent}...`;
+            } else {
+                truncatedContent = item.content.substring(0, 20).trim() + "..."; // Fallback if no match is found
+            }
+        }
+
+        let truncatedName = item.name.substring(0, 20).trim();
+        if(item.name.length >= 20) {
+            truncatedName += "...";
+        }
+
+        return {
+            id: item.id,
+            name: isFilenameMatch ? truncatedName : truncatedContent,
+            match: isFilenameMatch ? "notepad" : `content in ${truncatedName}`
+        };
+    });
+
+    return results;
+}
+
+// Watch for changes in notepads.json or .txt files
+fs.watch(DATA_DIR, (eventType, filename) => {
+    if (filename.endsWith(".txt")) indexNotepads();
+});
+fs.watch(NOTEPADS_FILE, () => indexNotepads());
+
+// Initial indexing
+indexNotepads();
+
+/* API Endpoints */
 // Get list of notepads
 app.get('/api/notepads', async (req, res) => {
     try {
-        await ensureDataDir();
-        const data = await fs.readFile(NOTEPADS_FILE, 'utf8');
-
+        const notepadsList = await loadNotepadsList();
         // Return the existing cookie value along with notes
         const note_history = req.cookies.dumbpad_page_history || 'default';
-        res.json({'notepads_list':JSON.parse(data), 'note_history':note_history});
+        res.json({'notepads_list': notepadsList, 'note_history': note_history});
     } catch (err) {
         res.status(500).json({ error: 'Error reading notepads list' });
     }
@@ -449,6 +555,7 @@ app.post('/api/notepads', async (req, res) => {
 
         await fs.writeFile(NOTEPADS_FILE, JSON.stringify(data));
         await fs.writeFile(path.join(DATA_DIR, `${id}.txt`), '');
+        indexNotepads(); // update searching index
         res.json(newNotepad);
     } catch (err) {
         res.status(500).json({ error: 'Error creating new notepad' });
@@ -467,6 +574,7 @@ app.put('/api/notepads/:id', async (req, res) => {
         }
         notepad.name = name;
         await fs.writeFile(NOTEPADS_FILE, JSON.stringify(data));
+        indexNotepads(); // update searching index
         res.json(notepad);
     } catch (err) {
         res.status(500).json({ error: 'Error renaming notepad' });
@@ -500,6 +608,7 @@ app.post('/api/notes/:id', async (req, res) => {
         const { id } = req.params;
         await ensureDataDir();
         await fs.writeFile(path.join(DATA_DIR, `${id}.txt`), req.body.content);
+        indexNotepads(); // update searching index
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Error saving notes' });
@@ -547,6 +656,7 @@ app.delete('/api/notepads/:id', async (req, res) => {
             // Continue even if file deletion fails
         }
 
+        indexNotepads(); // update searching index
         res.json({ success: true, message: 'Notepad deleted successfully' });
     } catch (err) {
         console.error('Error in delete notepad endpoint:', err);
@@ -558,3 +668,20 @@ app.delete('/api/notepads/:id', async (req, res) => {
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
 }); 
+
+/* Search API Endpoints */
+// Search
+app.get('/api/search', (req, res) => {
+    const query = req.query.query || '';
+    const results = searchNotepads(query);
+    
+    // set up for pagination
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = results.length; // defaults to all results for now
+    const paginatedResults = results.slice((page - 1) * pageSize, page * pageSize);
+    res.json({
+        results: paginatedResults,
+        totalPages: Math.ceil(results.length / pageSize),
+        currentPage: page
+    });
+});

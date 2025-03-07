@@ -70,7 +70,10 @@ h1 {
     color: var(--text-color);
 }
 
-#theme-toggle {
+.header-right {
+    display: flex;
+    justify-content: center;
+    align-items: center;
     position: absolute;
     right: 1rem;
     background: none;
@@ -215,7 +218,8 @@ main {
     background-color: var(--textarea-bg);
     color: var(--text-color);
     font-size: 0.875rem;
-    min-width: 150px;
+    min-width: 5rem;
+    max-width: 13rem;
 }
 
 .icon-button {
@@ -235,7 +239,7 @@ main {
     background-color: var(--button-hover);
 }
 
-#preview-markdown.active svg {
+#preview-markdown.active svg, #search-open.active svg {
     stroke: var(--primary-color);
 }
 
@@ -456,7 +460,7 @@ main {
     transform: translateY(0);
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1150px) {
     .container {
         padding: 0.5rem;
     }
@@ -493,9 +497,13 @@ main {
         width: 100%;
         justify-content: center;
     }
+
+    .header-right {
+        position: static;
+    }
 }
 
-@media (max-width: 440px) {
+@media (max-width: 500px) {
     .pin-container {
         gap: 0.5rem;
     }
@@ -604,4 +612,66 @@ main {
 .tooltip.show {
     visibility: visible;
     opacity: 1;
+}
+
+/* Search styles */
+/* Scoped Search Styles */
+#search-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 60%;
+    /* background: rgba(0, 0, 0, 0.15); */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+#search-modal.hidden {
+    display: none;
+}
+.search-modal-content {
+    background: var(--header-bg);
+    padding: 20px;
+    min-width: 30%;
+    max-width: 50%;
+    border-radius: 8px;
+    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.3);
+}
+#search-modal input {
+    width: 100%;
+    padding: 8px;
+    margin-bottom: 10px;
+    border: 1px solid var(--primary-color);
+    border-radius: 4px;
+    background-color: var(--textarea-bg);
+    color: var(--text-color);
+}
+#search-results {
+    list-style-type: none;
+    padding: 0;
+    margin: 0;
+    max-height: 30rem;
+    overflow-y: auto;
+}
+#search-results li {
+    list-style-type: none;
+    padding: 5px;
+    cursor: pointer;
+    border-bottom: 0.1px solid var(--secondary-color);
+    transition: background-color 0.2s;
+}
+#search-results li:last-child {
+    border-bottom: none;
+}
+#search-results li:hover,
+#search-results .selected {
+    background-color: var(--button-hover);
+    border-radius: 6px;
+    padding: 4px 8px; /* Adds spacing to make the rounded corners more visible */
+}
+#search-results mark {
+    background: var(--primary-color);
+    font-weight: bold;
 }
