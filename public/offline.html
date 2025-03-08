@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DumbPad - Offline</title>
+    <link rel="icon" type="image/svg+xml" href="Assets/dumbpad.svg">
+    <link rel="alternate icon" type="image/png" href="Assets/dumbpad.png">
+    <style>
+        :root {
+            --primary-color: #BF2E4E;
+            --text-color: #1a1a1a;
+            --bg-color: #ffffff;
+        }
+        
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --text-color: #ffffff;
+                --bg-color: #1a1a1a;
+            }
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            background-color: var(--bg-color);
+            padding: 20px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: var(--primary-color);
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        p {
+            font-size: 1.2rem;
+            margin-bottom: 2rem;
+        }
+        
+        .icon {
+            width: 120px;
+            height: 120px;
+            margin-bottom: 2rem;
+        }
+        
+        .retry-button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        
+        .retry-button:hover {
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <img src="Assets/dumbpad.svg" alt="DumbPad Logo" class="icon">
+        <h1>You're Offline</h1>
+        <p>It looks like you've lost your internet connection. Some features of DumbPad require an internet connection to work properly.</p>
+        <p>Your cached notepads should still be available, but you won't be able to create new ones or sync changes until you're back online.</p>
+        <button class="retry-button" onclick="window.location.reload()">Try Again</button>
+    </div>
+    
+    <script>
+        // Check connection status when the page loads
+        window.addEventListener('online', () => window.location.href = '/');
+    </script>
+</body>
+</html> 

@@ -5,6 +5,18 @@ import { StatusManager } from './status.js';
 import SearchManager from './search.js';
 import { marked } from '/js/marked/marked.esm.js';
 
+// Service Worker Registration
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', async () => {
+        try {
+            const registration = await navigator.serviceWorker.register('/sw.js');
+            console.log('Service Worker registered with scope:', registration.scope);
+        } catch (error) {
+            console.error('Service Worker registration failed:', error);
+        }
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     const DEBUG = false;
     let isPreviewMode = false;
