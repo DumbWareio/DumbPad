@@ -4,6 +4,7 @@ import { CursorManager } from './cursor-manager.js';
 import { StatusManager } from './status.js';
 import SearchManager from './search.js';
 import { marked } from '/js/marked/marked.esm.js';
+import * as OfflineSync from './offline-sync.js';
 
 // Service Worker Registration
 if ('serviceWorker' in navigator) {
@@ -11,6 +12,34 @@ if ('serviceWorker' in navigator) {
         try {
             const registration = await navigator.serviceWorker.register('/sw.js');
             console.log('Service Worker registered with scope:', registration.scope);
+            
+            // Set up background sync when supported
+            if ('sync' in registration) {
+                // Register a sync when needed
+                window.registerSync = () => {
+                    registration.sync.register('sync-notes')
+                        .then(() => console.log('Sync registered'))
+                        .catch(err => console.error('Sync registration failed:', err));
+                };
+            } else {
+                window.registerSync = () => {
+                    // Fallback for browsers without background sync
+                    if (navigator.onLine) {
+                        // Send a message to the service worker to check for queued requests
+                        registration.active.postMessage({ type: 'CHECK_SYNC' });
+                    }
+                };
+            }
+            
+            // Listen for messages from the service worker
+            navigator.serviceWorker.addEventListener('message', event => {
+                if (event.data && event.data.type === 'sync-complete') {
+                    console.log('Sync completed for:', event.data.url);
+                    // Update the UI to reflect successful sync
+                    updateSyncStatus('synced');
+                    statusManager.show('All changes synced', 'success', 3000);
+                }
+            });
         } catch (error) {
             console.error('Service Worker registration failed:', error);
         }
@@ -45,7 +74,26 @@ document.addEventListener('DOMContentLoaded', () => {
     const downloadTxt = document.getElementById('download-txt');
     const downloadMd = document.getElementById('download-md');
     const downloadCancel = document.getElementById('download-cancel');
-
+    
+    // Sync UI elements
+    const syncStatusIndicator = document.getElementById('sync-status');
+    const syncModal = document.getElementById('sync-modal');
+    const syncNowBtn = document.getElementById('sync-now');
+    const syncCancelBtn = document.getElementById('sync-cancel');
+    const syncProgressBar = document.getElementById('sync-progress-bar');
+    const syncProgressStatus = document.getElementById('sync-progress-status');
+    
+    // Conflict resolution UI elements
+    const conflictModal = document.getElementById('conflict-modal');
+    const useLocalBtn = document.getElementById('use-local');
+    const useServerBtn = document.getElementById('use-server');
+    const useMergedBtn = document.getElementById('use-merged');
+    const useCustomBtn = document.getElementById('use-custom');
+    const localPreview = document.querySelector('.local-preview');
+    const serverPreview = document.querySelector('.server-preview');
+    const mergedPreview = document.querySelector('.merged-preview');
+    const customResolution = document.getElementById('custom-resolution');
+    
     // Theme handling
     const THEME_KEY = 'dumbpad_theme';
     let currentTheme = localStorage.getItem(THEME_KEY) || 'light';
@@ -100,18 +148,70 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Load notes
     const loadNotes = async (notepadId) => {
+        if (!notepadId) return;
+        
         try {
-            const response = await fetchWithPin(`/api/notes/${notepadId}`);
-            const data = await response.json();
-            previousEditorValue = editor.value;
-            editor.value = data.content;
+            const result = await fetchWithPin(`/api/notes/${notepadId}`);
+            const data = await result.json();
             
-            if (isPreviewMode) {
-                // Update preview if in preview mode
-                previewPane.innerHTML = marked.parse(data.content);
+            if (data.success) {
+                editor.value = data.content;
+                currentVersion = data.content; // Store the current server version
+                
+                if (isPreviewMode) {
+                    previewPane.innerHTML = marked.parse(data.content);
+                }
+                
+                // Check if there are pending offline edits for this notepad
+                if (isInitialLoad) {
+                    isInitialLoad = false;
+                    
+                    try {
+                        const latestOfflineEdit = await OfflineSync.getLatestOfflineEdit(notepadId);
+                        if (latestOfflineEdit) {
+                            // We have offline edits, ask user what to do
+                            const shouldUseOffline = confirm(
+                                'You have unsynchronized changes for this notepad. Would you like to use your offline version?'
+                            );
+                            
+                            if (shouldUseOffline) {
+                                editor.value = latestOfflineEdit.content;
+                                if (isPreviewMode) {
+                                    previewPane.innerHTML = marked.parse(latestOfflineEdit.content);
+                                }
+                            }
+                        }
+                    } catch (err) {
+                        console.error('Error checking for offline edits:', err);
+                    }
+                }
+                
+                return data.content;
+            } else {
+                throw new Error(data.error || 'Failed to load notes');
             }
         } catch (err) {
             console.error('Error loading notes:', err);
+            statusManager.show('Error loading notepad', 'error', 3000);
+            
+            // Try to load from IndexedDB if we're offline
+            try {
+                const latestOfflineEdit = await OfflineSync.getLatestOfflineEdit(notepadId);
+                if (latestOfflineEdit) {
+                    editor.value = latestOfflineEdit.content;
+                    if (isPreviewMode) {
+                        previewPane.innerHTML = marked.parse(latestOfflineEdit.content);
+                    }
+                    
+                    statusManager.show('Loaded offline version', 'warning', 3000);
+                    updateSyncStatus('offline');
+                    return latestOfflineEdit.content;
+                }
+            } catch (offlineErr) {
+                console.error('Failed to load offline version:', offlineErr);
+            }
+            
+            return '';
         }
     };
 
@@ -393,7 +493,18 @@ document.addEventListener('DOMContentLoaded', () => {
     // Save notes with debounce
     const saveNotes = async (content) => {
         try {
-            await fetchWithPin(`/api/notes/${currentNotepadId}`, {
+            // Check if we're online
+            if (!OfflineSync.isOnline()) {
+                // We're offline, save to IndexedDB
+                await OfflineSync.saveOfflineEdit(currentNotepadId, content, currentVersion);
+                updateSyncStatus('offline');
+                statusManager.show('Saved offline', 'warning', 3000);
+                lastSaveTime = Date.now();
+                return;
+            }
+            
+            // We're online, try to save to server
+            const response = await fetchWithPin(`/api/notes/${currentNotepadId}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -401,19 +512,40 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({ content }),
             });
             
-            if (collaborationManager.ws && collaborationManager.ws.readyState === WebSocket.OPEN && !collaborationManager.isReceivingUpdate) {
-                collaborationManager.ws.send(JSON.stringify({
-                    type: 'update',
-                    notepadId: currentNotepadId,
-                    content: content
-                }));
+            // Check if the request was handled offline by the service worker
+            const responseData = await response.json();
+            if (responseData.offline) {
+                updateSyncStatus('pending');
+                statusManager.show('Saved offline (will sync when online)', 'warning', 3000);
+            } else {
+                // Normal online save
+                if (collaborationManager.ws && collaborationManager.ws.readyState === WebSocket.OPEN && !collaborationManager.isReceivingUpdate) {
+                    collaborationManager.ws.send(JSON.stringify({
+                        type: 'update',
+                        notepadId: currentNotepadId,
+                        content: content
+                    }));
+                }
+                
+                updateSyncStatus('synced');
+                statusManager.show('Saved');
+                currentVersion = content; // Store current server version
             }
             
-            statusManager.show('Saved');
             lastSaveTime = Date.now();
         } catch (err) {
             console.error('Error saving notes:', err);
-            statusManager.show('Error saving', 'error', 3000);
+            
+            // Try to save offline
+            try {
+                await OfflineSync.saveOfflineEdit(currentNotepadId, content, currentVersion);
+                updateSyncStatus('offline');
+                statusManager.show('Saved offline', 'warning', 3000);
+                lastSaveTime = Date.now();
+            } catch (offlineErr) {
+                console.error('Failed to save offline:', offlineErr);
+                statusManager.show('Error saving', 'error', 3000);
+            }
         }
     };
 
@@ -776,7 +908,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 baseUrl = config.baseUrl;
 
                 loadNotepads().then(() => {
-                    loadNotes(currentNotepadId);
+                    checkForOfflineEdits(); // Check for offline edits after loading notepads
                 });
             })
             .catch(err => console.error('Error loading site configuration:', err));
@@ -792,6 +924,218 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize WebSocket connection
     collaborationManager.setupWebSocket();
 
+    // Initialize offline synchronization
+    let isInitialLoad = true;
+    let currentVersion = ''; // Tracks the known server version
+    
+    // Initialize IndexedDB
+    OfflineSync.initIndexedDB().catch(err => {
+        console.error('Failed to initialize IndexedDB:', err);
+    });
+    
+    // Check for offline edits and prompt for sync if needed
+    async function checkForOfflineEdits() {
+        try {
+            const pendingEdits = await OfflineSync.getPendingOfflineEdits();
+            if (pendingEdits.length > 0) {
+                showSyncModal(pendingEdits);
+            }
+        } catch (err) {
+            console.error('Error checking for offline edits:', err);
+        }
+    }
+    
+    // Show the sync modal with pending edits
+    function showSyncModal(pendingEdits) {
+        syncProgressBar.style.width = '0%';
+        syncProgressStatus.textContent = `Found ${pendingEdits.length} pending change${pendingEdits.length > 1 ? 's' : ''}`;
+        syncModal.style.display = 'block';
+    }
+    
+    // Handle sync now button click
+    syncNowBtn.addEventListener('click', async () => {
+        syncProgressStatus.textContent = 'Starting synchronization...';
+        
+        try {
+            const pendingEdits = await OfflineSync.getPendingOfflineEdits();
+            let processed = 0;
+            
+            for (const edit of pendingEdits) {
+                syncProgressStatus.textContent = `Syncing notepad: ${getNotepadNameById(edit.notepadId) || edit.notepadId}`;
+                
+                try {
+                    // Try to get the current server version
+                    const serverResponse = await fetchWithPin(`/api/notes/${edit.notepadId}`, {
+                        method: 'GET'
+                    });
+                    
+                    const serverData = await serverResponse.json();
+                    
+                    if (!serverData.success) {
+                        throw new Error('Failed to fetch server version');
+                    }
+                    
+                    const serverContent = serverData.content;
+                    const localContent = edit.content;
+                    const originalContent = edit.originalVersion;
+                    
+                    // Check if there's a conflict
+                    if (serverContent !== originalContent && serverContent !== localContent) {
+                        // We have a conflict, show conflict resolution UI
+                        await showConflictResolution(edit.notepadId, originalContent, localContent, serverContent);
+                    } else {
+                        // No conflict, just save
+                        await fetchWithPin(`/api/notes/${edit.notepadId}`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ content: localContent }),
+                        });
+                        
+                        // Mark edit as synced
+                        await OfflineSync.markEditAsSynced(edit.id);
+                    }
+                } catch (error) {
+                    console.error(`Error syncing edit for notepad ${edit.notepadId}:`, error);
+                    syncProgressStatus.textContent = `Error syncing notepad: ${getNotepadNameById(edit.notepadId) || edit.notepadId}`;
+                    // Continue with next edit
+                }
+                
+                processed++;
+                syncProgressBar.style.width = `${(processed / pendingEdits.length) * 100}%`;
+            }
+            
+            updateSyncStatus('synced');
+            syncProgressStatus.textContent = 'All changes synchronized!';
+            syncProgressBar.style.width = '100%';
+            
+            // Close the modal after a short delay
+            setTimeout(() => {
+                syncModal.style.display = 'none';
+                statusManager.show('All changes synced', 'success', 3000);
+            }, 1500);
+            
+        } catch (err) {
+            console.error('Sync process failed:', err);
+            syncProgressStatus.textContent = 'Sync failed. Please try again.';
+        }
+    });
+    
+    // Handle sync cancel button click
+    syncCancelBtn.addEventListener('click', () => {
+        syncModal.style.display = 'none';
+    });
+    
+    // Show conflict resolution dialog
+    function showConflictResolution(notepadId, originalContent, localContent, serverContent) {
+        return new Promise((resolve, reject) => {
+            // Set conflict content previews
+            localPreview.textContent = localContent;
+            serverPreview.textContent = serverContent;
+            
+            // Try to auto-merge
+            const mergedContent = OfflineSync.threeWayMerge(originalContent, localContent, serverContent);
+            
+            // Show merged result
+            mergedPreview.textContent = mergedContent;
+            customResolution.value = mergedContent;
+            
+            // Show conflict modal
+            conflictModal.style.display = 'block';
+            
+            // Handle resolution selection
+            const conflictResolverHandler = async (content) => {
+                try {
+                    // Save the resolved content
+                    await fetchWithPin(`/api/notes/${notepadId}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ content }),
+                    });
+                    
+                    // Mark any offline edits for this notepad as synced
+                    const pendingEdits = await OfflineSync.getPendingOfflineEdits();
+                    for (const edit of pendingEdits) {
+                        if (edit.notepadId === notepadId) {
+                            await OfflineSync.markEditAsSynced(edit.id);
+                        }
+                    }
+                    
+                    // Close conflict modal
+                    conflictModal.style.display = 'none';
+                    
+                    // If this is the current notepad, update the editor
+                    if (notepadId === currentNotepadId) {
+                        editor.value = content;
+                        if (isPreviewMode) {
+                            previewPane.innerHTML = marked.parse(content);
+                        }
+                    }
+                    
+                    resolve(true);
+                } catch (err) {
+                    console.error('Error saving conflict resolution:', err);
+                    reject(err);
+                }
+            };
+            
+            // Set up event listeners for conflict resolution
+            useLocalBtn.onclick = () => conflictResolverHandler(localContent);
+            useServerBtn.onclick = () => conflictResolverHandler(serverContent);
+            useMergedBtn.onclick = () => conflictResolverHandler(mergedContent);
+            useCustomBtn.onclick = () => conflictResolverHandler(customResolution.value);
+        });
+    }
+    
+    // Update the sync status indicator
+    function updateSyncStatus(status) {
+        syncStatusIndicator.className = `sync-status ${status}`;
+        
+        switch(status) {
+            case 'synced':
+                syncStatusIndicator.title = 'All changes saved';
+                break;
+            case 'offline':
+                syncStatusIndicator.title = 'You are working offline';
+                break;
+            case 'pending':
+                syncStatusIndicator.title = 'Changes pending synchronization';
+                break;
+        }
+    }
+    
+    // Set up network status listeners
+    const connectivityListeners = OfflineSync.setupConnectivityListeners({
+        onOnline: async () => {
+            console.log('Back online');
+            updateSyncStatus('pending');
+            statusManager.show('Back online, syncing changes...', 'info', 3000);
+            
+            // Register for background sync
+            if (window.registerSync) {
+                window.registerSync();
+            }
+            
+            // Check if we need to sync changes
+            checkForOfflineEdits();
+        },
+        onOffline: () => {
+            console.log('Went offline');
+            updateSyncStatus('offline');
+            statusManager.show('You are offline. Changes will be saved locally.', 'warning', 3000);
+        }
+    });
+    
+    // Check for offline edits at startup
+    if (OfflineSync.isOnline()) {
+        updateSyncStatus('synced');
+    } else {
+        updateSyncStatus('offline');
+    }
+    
     // Start the app
     initializeApp();
 });

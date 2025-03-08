@@ -33,6 +33,24 @@
                     <h1>DumbPad</h1>
                 </div>
                 <div class="header-right"> 
+                    <div id="sync-status" class="sync-status synced" title="All changes saved">
+                        <svg class="sync-icon synced" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M20 6L9 17l-5-5"></path>
+                        </svg>
+                        <svg class="sync-icon offline" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="1" y1="1" x2="23" y2="23"></line>
+                            <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"></path>
+                            <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"></path>
+                            <path d="M10.71 5.05A16 16 0 0 1 22.58 9"></path>
+                            <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"></path>
+                            <path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path>
+                            <line x1="12" y1="20" x2="12.01" y2="20"></line>
+                        </svg>
+                        <svg class="sync-icon pending" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                    </div>
                     <button id="search-open" class="icon-button" data-tooltip="Search (ctrl+k / cmd+k)">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" /><path d="M21 21l-6 -6" />
@@ -151,6 +169,58 @@
             <div class="search-modal-content">
                 <input type="text" id="search-box" placeholder="Search notes..." autofocus />
                 <ul id="search-results"></ul>
+            </div>
+        </div>
+        <!-- Conflict Resolution Modal -->
+        <div id="conflict-modal" class="modal">
+            <div class="modal-content conflict-modal-content">
+                <h2>Sync Conflict Detected</h2>
+                <p>Your offline changes conflict with online changes. Please choose how to resolve this conflict:</p>
+                
+                <div class="conflict-options">
+                    <div class="conflict-option">
+                        <h3>Local Version (Your Changes)</h3>
+                        <div class="conflict-preview local-preview"></div>
+                        <button id="use-local" class="conflict-button">Use Local Version</button>
+                    </div>
+                    
+                    <div class="conflict-option">
+                        <h3>Server Version (Online Changes)</h3>
+                        <div class="conflict-preview server-preview"></div>
+                        <button id="use-server" class="conflict-button">Use Server Version</button>
+                    </div>
+                </div>
+                
+                <div class="conflict-option full-width">
+                    <h3>Merged Version (Automatic)</h3>
+                    <div class="conflict-preview merged-preview"></div>
+                    <button id="use-merged" class="conflict-button primary">Use Merged Version</button>
+                </div>
+                
+                <div class="conflict-option full-width">
+                    <h3>Custom Resolution</h3>
+                    <p class="helper-text">Edit the merged version directly:</p>
+                    <textarea id="custom-resolution" class="custom-resolution"></textarea>
+                    <button id="use-custom" class="conflict-button">Use Custom Resolution</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Sync Status Modal -->
+        <div id="sync-modal" class="modal">
+            <div class="modal-content">
+                <h2>Offline Changes</h2>
+                <p class="modal-message">You made changes while offline that need to be synchronized.</p>
+                <div class="sync-progress">
+                    <div class="progress-bar">
+                        <div class="progress-bar-inner" id="sync-progress-bar"></div>
+                    </div>
+                    <div class="progress-status" id="sync-progress-status">Preparing to sync...</div>
+                </div>
+                <div class="modal-buttons">
+                    <button id="sync-now" class="primary">Sync Now</button>
+                    <button id="sync-cancel">Cancel</button>
+                </div>
             </div>
         </div>
     </div>
