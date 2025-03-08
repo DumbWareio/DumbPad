@@ -17,6 +17,7 @@ export class CollaborationManager {
         this.lastCursorUpdate = 0;
         this.CURSOR_UPDATE_INTERVAL = 50; // More frequent cursor updates
         this.DEBUG = false;
+        this.pauseReconnection = false; // Flag to control reconnection attempts
         
         // For cursor update debouncing
         this.cursorUpdateTimeout = null;
@@ -24,6 +25,14 @@ export class CollaborationManager {
 
     // Initialize WebSocket connection
     setupWebSocket() {
+        // Don't attempt to reconnect if we're deliberately paused (offline)
+        if (this.pauseReconnection) {
+            if (this.DEBUG) {
+                console.log('WebSocket reconnection paused (offline mode)');
+            }
+            return;
+        }
+        
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${protocol}//${window.location.host}`;
         
@@ -43,13 +52,19 @@ export class CollaborationManager {
             if (this.DEBUG) {
                 console.log('WebSocket connection closed');
             }
-            setTimeout(() => this.setupWebSocket(), 5000);
+            
+            // Only attempt to reconnect if we're not deliberately paused (offline)
+            if (!this.pauseReconnection) {
+                setTimeout(() => this.setupWebSocket(), 5000);
+            }
         };
         
         this.ws.onopen = () => {
             if (this.DEBUG) {
                 console.log('WebSocket connection established');
             }
+            // Clear pauseReconnection flag when successfully connected
+            this.pauseReconnection = false;
             this.updateLocalCursor();
         };
         

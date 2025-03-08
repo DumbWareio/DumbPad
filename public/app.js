@@ -519,12 +519,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 statusManager.show('Saved offline (will sync when online)', 'warning', 3000);
             } else {
                 // Normal online save
-                if (collaborationManager.ws && collaborationManager.ws.readyState === WebSocket.OPEN && !collaborationManager.isReceivingUpdate) {
+                if (collaborationManager.ws && 
+                    collaborationManager.ws.readyState === WebSocket.OPEN && 
+                    !collaborationManager.isReceivingUpdate) {
                     collaborationManager.ws.send(JSON.stringify({
                         type: 'update',
                         notepadId: currentNotepadId,
                         content: content
                     }));
+                } else if (!OfflineSync.isOnline()) {
+                    // If WebSocket is closed because we're offline, don't show an error
+                    // We already handle this through offline storage
+                    console.log('WebSocket closed, changes saved to server but not broadcast in real-time');
                 }
                 
                 updateSyncStatus('synced');
@@ -1119,6 +1125,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 window.registerSync();
             }
             
+            // Re-establish WebSocket connection for live collaboration
+            if (collaborationManager && (!collaborationManager.ws || collaborationManager.ws.readyState !== WebSocket.OPEN)) {
+                collaborationManager.setupWebSocket();
+                console.log('Re-establishing WebSocket connection for collaboration');
+            }
+            
             // Check if we need to sync changes
             checkForOfflineEdits();
         },
@@ -1126,6 +1138,14 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('Went offline');
             updateSyncStatus('offline');
             statusManager.show('You are offline. Changes will be saved locally.', 'warning', 3000);
+            
+            // Close WebSocket gracefully if it's open
+            if (collaborationManager && collaborationManager.ws && collaborationManager.ws.readyState === WebSocket.OPEN) {
+                console.log('Closing WebSocket connection while offline');
+                // Set a flag to prevent automatic reconnection attempts while offline
+                collaborationManager.pauseReconnection = true;
+                collaborationManager.ws.close();
+            }
         }
     });
     
