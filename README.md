@@ -30,6 +30,7 @@ A stupid simple, no auth (unless you want it!), modern notepad application with 
 - Data persistence across updates
 - Markdown Formatting
 - Fuzzy Search (by filename and file contents)
+- PWA Support
 
 ## Quick Start
 
@@ -116,7 +117,7 @@ docker run -p 3000:3000 -v "${PWD}\data:/app/data" dumbwareio/dumbpad:latest
 * 📝 Auto-saving notes
 * 🌓 Dark/Light mode support
 * 🔒 Optional PIN protection
-* 📱 Mobile-friendly interface
+* 📱 Mobile-friendly interface / PWA Support
 * 🗂️ Multiple notepads
 * 📄 Markdown Formatting
 * ⬇️ Download notes as text or markdown files

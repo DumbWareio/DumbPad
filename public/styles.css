@@ -12,6 +12,7 @@
     --button-hover: #f3f4f6;
     --danger-color: #dc2626;
     --danger-hover: #ef4444;
+    --code-markdown: rgba(37, 100, 235, 0.2);
 }
 
 .dark-mode {
@@ -27,6 +28,7 @@
     --button-hover: #374151;
     --danger-color: #dc2626;
     --danger-hover: #b91c1c;
+    --code-markdown: rgba(96, 165, 250, 0.2);
 }
 
 * {
@@ -120,7 +122,7 @@ main {
 }
 
 
-#editor {
+#editor, #preview-pane {
     width: 100%;
     height: 100%;
     padding: 1.5rem;
@@ -152,44 +154,54 @@ main {
 }
 
 /* Preview pane markdown styles */
+.preview-container {
+    overflow: auto;
+}
 #preview-pane {
     white-space: pre-wrap;
-    width: 100%;
-    height: 100%;
-    border: none;
-    outline: none;
-    resize: none;
-    background-color: transparent;
-    color: var(--text-color);
-    transition: background-color 0.3s, color 0.3s;
-    position: relative;
-    z-index: 1;
+    font-family: sans-serif;
 }
 
-.status-container {
+code {
+    background-color: var(--code-markdown);
+    padding: 2px 4px;
+    border-radius: 5px;
+}
+
+.toast-container {
     position: fixed;
     bottom: 1rem;
     left: 50%;
     transform: translateX(-50%);
     padding: 0.5rem 1rem;
-    border-radius: 20px;
-    font-size: 0.875rem;
-    opacity: 0;
-    transition: opacity 0.3s;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
     z-index: 2000;
 }
 
-.status-container.visible {
+.toast {
+    color: #ffffff;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    opacity: 0;
+    transition: opacity 0.3s ease-in-out;
+    max-width: 300px;
+    box-sizing: border-box;
+    word-wrap: break-word;
+    font-size: 0.875rem;
+}
+
+.toast.show {
     opacity: 1;
 }
 
-.success-status {
+.toast.success {
     background-color: var(--success-status-bg);
-    color: #ffffff;
 }
-.error-status {
+
+.toast.error {
     background-color: var(--danger-status-bg);
-    color: #ffffff;
 }
 
 .notepad-controls {
@@ -216,6 +228,9 @@ main {
     font-size: 0.875rem;
     min-width: 5rem;
     max-width: 13rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .icon-button {
@@ -647,7 +662,11 @@ main {
 
     .editor-container, .preview-container {
         /* min-height: 84vh; */
-        max-height: 85vh;
+        max-height: 84vh;
+    }
+
+    .notepad-controls-wrapper {
+        gap: 2rem;
     }
 }
 
@@ -677,6 +696,7 @@ main {
 
     .header-right {
         position: static;
+        gap: 4rem;
     }
 
     #header-title {
@@ -694,6 +714,7 @@ main {
     #notepad-selector {
         margin: 0, auto;
         padding: 0, auto;
+        width: auto;
     }
     
     .select-wrapper {
@@ -704,7 +725,7 @@ main {
     }
 
     .editor-container, .preview-container {
-        max-height: 73vh;
+        max-height: 71vh;
         margin: 0, auto;
         padding: 0, auto;
     }

@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "generate-icons": "node scripts/generate-png.js"
+    "generate-icons": "node scripts/generate-png.js",
+    "generate-pwa-manifest": "node scripts/pwa-manifest-generator.js"
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",

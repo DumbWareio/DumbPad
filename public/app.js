@@ -13,7 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const previewContainer = document.getElementById('preview-container');
     const previewPane = document.getElementById('preview-pane');
     const themeToggle = document.getElementById('theme-toggle');
-    const statusManager = new StatusManager(document.getElementById('status-container'));
+    const statusManager = new StatusManager(document.getElementById('toast-container'));
     const notepadSelector = document.getElementById('notepad-selector');
     const newNotepadBtn = document.getElementById('new-notepad');
     const renameNotepadBtn = document.getElementById('rename-notepad');
@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const response = await fetchWithPin(`/api/notes/${notepadId}`);
             const data = await response.json();
-            previousEditorValue = editor.value;
+            previousEditorValue = data.content;
             editor.value = data.content;
             
             if (isPreviewMode) {
@@ -603,6 +603,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     await renameNotepad(newName);
                     renameModal.classList.remove('visible');
                 }
+                editor.focus();
             }
         });
         renameCancel.addEventListener('click', () => {
@@ -626,9 +627,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         deleteCancel.addEventListener('click', () => {
             deleteModal.classList.remove('visible');
+            editor.focus();
         });
         deleteConfirm.addEventListener('click', async () => {
             await deleteNotepad();
+            editor.focus();
         });
     
         downloadNotepadBtn.addEventListener('click', () => {
@@ -637,19 +640,25 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         downloadCancel.addEventListener('click', () => {
             downloadModal.classList.remove('visible');
+            editor.focus();
         });
         downloadTxt.addEventListener('click', () => {
             // Download as TXT
             downloadNotepad('txt');
             downloadModal.classList.remove('visible');
+            editor.focus();
         })
         downloadMd.addEventListener('click', () => {
             // Download as MD
             downloadNotepad('md');
             downloadModal.classList.remove('visible');
+            editor.focus();
         });
 
-        printNotepadBtn.addEventListener('click', printNotepad);
+        printNotepadBtn.addEventListener('click', () => {
+            printNotepad();
+            editor.focus();
+        });
         previewMarkdownBtn.addEventListener('click', toggleMarkdownPreview);
     }
 
@@ -727,7 +736,17 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const addServiceWorkerEventListeners = () => {
+        // Register PWA Service Worker
+        if ("serviceWorker" in navigator) {
+            navigator.serviceWorker.register("/service-worker.js")
+                .then((reg) => console.log("Service Worker registered:", reg.scope))
+                .catch((err) => console.log("Service Worker registration failed:", err));
+        }
+    }
+
     const addEventListeners = () => {
+        addServiceWorkerEventListeners();
         addThemeEventListeners();
         addEditorEventListeners();
         addNotepadControlsEventListeners();
@@ -736,6 +755,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const setupToolTips = () => {
+        // Check if it's a mobile device using a media query or pointer query
+        const isMobile = window.matchMedia('(max-width: 585px)').matches || window.matchMedia('(pointer: coarse)').matches;
+        if (isMobile) return;
+        
         tooltips.forEach((element) => {
             let tooltip = document.createElement('div');
             tooltip.classList.add('tooltip');
