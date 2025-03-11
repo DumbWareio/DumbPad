@@ -62,7 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Add credentials to all API requests
     const fetchWithPin = async (url, options = {}) => {
         options.credentials = 'same-origin';
-        const fullUrl = url.startsWith('http') ? url : `${baseUrl}${url}`;
+        const fullUrl = baseUrl ? `${baseUrl}${url}` : url;
         return fetch(fullUrl, options);
     };
 
@@ -784,7 +784,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(config => {
                 document.getElementById('page-title').textContent = `${config.siteTitle} - Simple Notes`;
                 document.getElementById('header-title').textContent = config.siteTitle;
-                baseUrl = config.baseUrl;
+                baseUrl = config.baseUrl || '';
 
                 loadNotepads().then(() => {
                     loadNotes(currentNotepadId);

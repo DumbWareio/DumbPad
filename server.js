@@ -365,7 +365,7 @@ app.get('/api/pin-required', (req, res) => {
 app.get('/api/config', (req, res) => {
     res.json({
         siteTitle: SITE_TITLE,
-        baseUrl: BASE_URL
+        baseUrl: process.env.BASE_URL
     });
 });
 

@@ -160,7 +160,7 @@
                     const config = await configResponse.json();
                     document.getElementById('site-title').textContent = config.siteTitle;
                     document.getElementById('page-title').textContent = `${config.siteTitle} - Login`;
-                    baseUrl = config.baseUrl;
+                    baseUrl = config.baseUrl || '';
 
                     // Then check PIN requirements
                     await checkPinRequired();
