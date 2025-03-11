@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const cookieParser = require('cookie-parser');
 const WebSocket = require('ws');
 const Fuse = require('fuse.js');
+const { generatePWAManifest } = require("./scripts/pwa-manifest-generator")
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -158,7 +159,9 @@ wss.on('connection', (ws) => {
 });
 
 const DATA_DIR = path.join(__dirname, 'data');
+const PUBLIC_DIR = path.join(__dirname, "public");
 const NOTEPADS_FILE = path.join(DATA_DIR, 'notepads.json');
+const SITE_TITLE = process.env.SITE_TITLE || 'DumbPad';
 const PIN = process.env.DUMBPAD_PIN;
 const COOKIE_NAME = 'dumbpad_auth';
 const COOKIE_MAX_AGE = 24 * 60 * 60 * 1000; // 24 hours
@@ -247,13 +250,24 @@ function secureCompare(a, b) {
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(cookieParser());
-app.use(express.static('public', {
-    index: false
-}));
 // Serve the marked library to clients
 app.use('/js/marked', express.static(
     path.join(__dirname, 'node_modules/marked/lib')
-  ));
+));
+
+generatePWAManifest(SITE_TITLE);
+app.use(express.static(path.join(__dirname, 'public'), {
+    index: false
+}));
+
+// Serve the pwa/asset manifest
+app.get("/asset-manifest.json", (req, res) => {
+    // generated in pwa-manifest-generator and fetched from service-worker.js
+    res.sendFile(path.join(PUBLIC_DIR, "asset-manifest.json"));
+  });
+app.get("/manifest.json", (req, res) => {
+    res.sendFile(path.join(PUBLIC_DIR, "manifest.json"));
+  });
 
 // Main app route with PIN check
 app.get('/', (req, res) => {
@@ -318,7 +332,7 @@ app.post('/api/verify-pin', (req, res) => {
         // Set secure HTTP-only cookie
         res.cookie(COOKIE_NAME, pin, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
+            secure: req.secure || (BASE_URL.startsWith("https") && process.env.NODE_ENV === 'production'),
             sameSite: 'strict',
             maxAge: COOKIE_MAX_AGE
         });
@@ -350,7 +364,7 @@ app.get('/api/pin-required', (req, res) => {
 // Get site configuration
 app.get('/api/config', (req, res) => {
     res.json({
-        siteTitle: process.env.SITE_TITLE || 'DumbPad',
+        siteTitle: SITE_TITLE,
         baseUrl: BASE_URL
     });
 });
@@ -548,7 +562,7 @@ app.post('/api/notepads', async (req, res) => {
         // Set new notes as the current page in cookies.
         res.cookie(PAGE_HISTORY_COOKIE, id, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
+            secure: req.secure || (BASE_URL.startsWith("https") && process.env.NODE_ENV === 'production'),
             sameSite: 'strict',
             maxAge: PAGE_HISTORY_COOKIE_AGE
         });
@@ -591,7 +605,7 @@ app.get('/api/notes/:id', async (req, res) => {
         // Set loaded notes as the current page in cookies.
         res.cookie(PAGE_HISTORY_COOKIE, id, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
+            secure: req.secure || (BASE_URL.startsWith("https") && process.env.NODE_ENV === 'production'),
             sameSite: 'strict',
             maxAge: PAGE_HISTORY_COOKIE_AGE
         });

@@ -2,29 +2,31 @@ export class StatusManager {
   constructor(containerElement) {
     this.container = containerElement;
     this.isError = 'error';
-    this.isSuccess= 'success';
+    this.isSuccess = 'success';
   }
 
   show(message, type = 'success', timeoutMs = 2000) {
-    if(type === this.isSuccess)
-      this.container.classList.add('success-status');
-    else
-      this.container.classList.add('error-status');
+    const toast = document.createElement('div');
+    toast.classList.add('toast');
+    toast.textContent = message;
 
-    this.container.textContent = message;
-    this.container.classList.add('visible');
-    this.remove(timeoutMs);
-  }
+    if (type === this.isSuccess) {
+      toast.classList.add('success');
+    } else {
+      toast.classList.add('error');
+    }
 
-  remove(timeoutMs) {
+    this.container.appendChild(toast);
+
     setTimeout(() => {
-      this.clearStatus();
-    }, timeoutMs);
-  }
+      toast.classList.add('show');
+    }, 10);
 
-  clearStatus() {
-    this.container.classList.remove('visible');
-    this.container.classList.remove('success-status');
-    this.container.classList.remove('error-status');
+    setTimeout(() => {
+      toast.classList.remove('show');
+      setTimeout(() => {
+        this.container.removeChild(toast);
+      }, 300); // Match transition duration
+    }, timeoutMs);
   }
 }
