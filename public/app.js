@@ -56,14 +56,18 @@ document.addEventListener('DOMContentLoaded', () => {
     let lastSaveTime = Date.now();
     const SAVE_INTERVAL = 2000;
     let currentNotepadId = 'default';
-    let baseUrl = '';
     let previousEditorValue = editor.value;
 
     // Add credentials to all API requests
     const fetchWithPin = async (url, options = {}) => {
         options.credentials = 'same-origin';
-        const fullUrl = baseUrl ? `${baseUrl}${url}` : url;
-        return fetch(fullUrl, options);
+        try {
+            return fetch(url, options); 
+        } 
+        catch (error) {
+            console.log(error);
+            statusManager.show(error, "error");
+        }
     };
 
     // Load notepads list
@@ -782,15 +786,19 @@ document.addEventListener('DOMContentLoaded', () => {
         fetch(`/api/config`)
             .then(response => response.json())
             .then(config => {
+                if (config.error) throw new Error(config.error);
+
                 document.getElementById('page-title').textContent = `${config.siteTitle} - Simple Notes`;
                 document.getElementById('header-title').textContent = config.siteTitle;
-                baseUrl = config.baseUrl || '';
 
                 loadNotepads().then(() => {
                     loadNotes(currentNotepadId);
                 });
             })
-            .catch(err => console.error('Error loading site configuration:', err));
+            .catch(err => {
+                console.error('Error loading site configuration:', err);
+                statusManager.show(err, "error", 30000);
+            });
         
         addEventListeners();
         setupToolTips();

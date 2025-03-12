@@ -8,9 +8,11 @@ services:
     volumes:
       - ./data:/app/data
     environment:
+      NODE_ENV: production # required for allowed origins
       # The title shown in the web interface
       SITE_TITLE: DumbPad
       # Optional PIN protection (leave empty to disable)
       DUMBPAD_PIN: 1234
       # The base URL for the application
-      BASE_URL: http://localhost:3001 # Comment out to allow any origin
+      BASE_URL: http://localhost:3001 # Use ALLOWED_ORIGINS below to allow all origins or specify a list
+      # ALLOWED_ORIGINS: '*' # '*' to allow all OR Comma-separated list of urls: https://internalip:port,https://base.proxy.tld,https://authprovider.domain.tld
