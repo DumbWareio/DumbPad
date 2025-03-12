@@ -30,7 +30,7 @@
         <div id="login-content">
             <div class="pin-header">
                 <h1 id="site-title">DumbPad</h1>
-                <h2>Enter PIN</h2>
+                <h2 id="pin-description">Enter PIN</h2>
             </div>
             <div id="pin-container" class="pin-container">
                 <!-- PIN inputs will be added dynamically -->
@@ -45,7 +45,6 @@
             const themeToggle = document.getElementById('theme-toggle');
             let pinDigits = [];
             let pinLength = 4;
-            let baseUrl = '';
 
             // Create PIN input boxes
             function createPinInputs(length) {
@@ -157,29 +156,33 @@
                 try {
                     // Fetch site configuration first
                     const configResponse = await fetch('/api/config');
+                    if (configResponse.status >= 400) {
+                        throw new Error(configResponse.statusText)
+                    }
                     const config = await configResponse.json();
                     document.getElementById('site-title').textContent = config.siteTitle;
                     document.getElementById('page-title').textContent = `${config.siteTitle} - Login`;
-                    baseUrl = config.baseUrl || '';
 
                     // Then check PIN requirements
                     await checkPinRequired();
                 } catch (err) {
                     console.error('Error during initialization:', err);
+                    document.getElementById("pin-description").textContent = '';
+                    pinError.textContent = err;
                 }
             };
 
             // Check if PIN is required
             const checkPinRequired = async () => {
                 try {
-                    const response = await fetch(`${baseUrl}/api/pin-required`);
+                    const response = await fetch(`/api/pin-required`);
                     const { required, length } = await response.json();
                     if (required) {
                         pinLength = length;
                         createPinInputs(length);
                         pinDigits[0].focus();
                     } else {
-                        window.location.href = `${baseUrl}/`;
+                        window.location.href = `/`;
                     }
                 } catch (err) {
                     console.error('Error checking PIN requirement:', err);
@@ -189,7 +192,7 @@
             // Verify PIN
             const verifyPin = async (pin) => {
                 try {
-                    const response = await fetch(`${baseUrl}/api/verify-pin`, {
+                    const response = await fetch(`/api/verify-pin`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -201,9 +204,9 @@
                     const data = await response.json();
                     if (data.success) {
                         pinError.textContent = '';
-                        window.location.href = `${baseUrl}/`;
+                        window.location.href = `/`;
                     } else {
-                        if (response.status === 429) {
+                        if (response.status === 429 || data.error) {
                             pinError.textContent = data.error;
                             setPinInputsDisabled(true);
                         } else {
