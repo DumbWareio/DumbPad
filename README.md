@@ -72,8 +72,13 @@ services:
       SITE_TITLE: DumbPad
       # Optional PIN protection (leave empty to disable)
       DUMBPAD_PIN: 1234
+      # production required for ALLOWED_ORIGINS
+      NODE_ENV: production
       # The base URL for the application
       BASE_URL: http://localhost:3000
+      # Use ALLOWED_ORIGINS below to allow all origins or specify a list
+      # Usage: '*' to allow all OR Comma-separated list of urls: 'http://internalip:port,https://base.proxy.tld,https://authprovider.domain.tld'
+      # ALLOWED_ORIGINS: '*'
 ```
 
 Then run:

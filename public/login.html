@@ -206,7 +206,7 @@
                         pinError.textContent = '';
                         window.location.href = `/`;
                     } else {
-                        if (response.status === 429 || data.error) {
+                        if (response.status === 429) {
                             pinError.textContent = data.error;
                             setPinInputsDisabled(true);
                         } else {
