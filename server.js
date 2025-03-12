@@ -17,62 +17,16 @@ const server = app.listen(PORT, () => {
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 
-// Trust proxy - required for secure cookies behind a reverse proxy
-app.set('trust proxy', 1);
-const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS;
-let allowedOrigins = false;
-if (ALLOWED_ORIGINS === '*' || process.env.NODE_ENV !== 'production') {
-    allowedOrigins = true;
-}
-else if (ALLOWED_ORIGINS) {
-    const allowed = ALLOWED_ORIGINS.split(',').map(origin => origin.trim());
-    allowedOrigins = allowed;
-    if (process.env.BASE_URL) allowedOrigins.push(process.env.BASE_URL);
-}
-else if (process.env.BASE_URL) {
-    allowedOrigins = [ process.env.BASE_URL ];
-}
-
-console.log("ALLOWED ORIGINS:", allowedOrigins);
-// CORS configuration
-const corsOptions = {
-    origin: allowedOrigins,
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-};
-
-function originValidationMiddleware(req, res, next) {
-    let origin = req.headers.referer;
-    if (origin) {
-        try {
-            // normalize url
-            const normalizedOrigin = new URL(origin).origin;
-            origin = normalizedOrigin;
-            console.log("NORMALIZED URL:", origin)
-        } catch (error) {
-            console.error("Error parsing referer URL:", error);
-        }
-    }
-
-    if (process.env.NODE_ENV === 'development' || origin === BASE_URL || allowedOrigins === '*' || allowedOrigins.includes(origin)) {
-        next();
-    } else {
-        console.warn("Blocked request from origin:", { origin });
-        res.status(403).json({ error: 'Forbidden' });
-    }
-}
-
 // Set up WebSocket server
 const wss = new WebSocket.Server({ server, verifyClient: (info, done) => {
     const origin = info.req.headers.origin;
-    if (process.env.NODE_ENV === 'development' || origin === BASE_URL || allowedOrigins === '*' || allowedOrigins.includes(origin))
-        done(true); // allow the connection
+    const isOriginValid = validateOrigin(origin);
+    if (isOriginValid) done(true); // allow the connection
     else {
         console.warn("Blocked connection from origin:", {origin});
         done(false, 403, 'Forbidden'); // reject the connection
     }
-} });
+}});
 
 // Store all active connections with their user IDs
 const clients = new Map();
@@ -289,6 +243,82 @@ function secureCompare(a, b) {
     }
 }
 
+// Trust proxy - required for secure cookies behind a reverse proxy
+app.set('trust proxy', 1);
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS;
+let allowedOrigins = [ BASE_URL ];
+if (ALLOWED_ORIGINS === '*' || process.env.NODE_ENV !== 'production') {
+    allowedOrigins = '*';
+}
+else if (ALLOWED_ORIGINS && typeof ALLOWED_ORIGINS === 'string') {
+    try {
+        const allowed = ALLOWED_ORIGINS.split(',').map(origin => origin.trim());
+        allowed.forEach(origin => {
+            const normalizedOrigin = normalizeOrigin(origin);
+            if (normalizedOrigin !== BASE_URL) allowedOrigins.push(normalizedOrigin);
+        });
+    }
+    catch (error) {
+        console.error(`Error setting up ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}:`, error);
+    }
+}
+console.log("ALLOWED ORIGINS:", allowedOrigins);
+
+function normalizeOrigin(origin) {
+    if (origin) {
+        try {
+            console.log("Validating Origin:", origin);
+            const normalizedOrigin = new URL(origin).origin;
+            console.log("Normalized Url:", normalizedOrigin);
+            return normalizedOrigin;
+        } catch (error) {
+            console.error("Error parsing referer URL:", error);
+            throw new Error("Error parsing referer URL:", error);
+        }
+    }
+}
+
+function validateOrigin(origin) {
+    if (process.env.NODE_ENV === 'development' || allowedOrigins === '*') return true;
+
+    try {
+        if (origin) origin = normalizeOrigin(origin);
+        else {
+            console.warn("No origin to validate.");
+            return false;
+        }
+
+        if (origin === BASE_URL || allowedOrigins.includes(origin)) return true; 
+        else {
+            console.warn("Blocked request from origin:", { origin });
+            return false;
+        }
+    }
+    catch (error) {
+        console.error(error);
+    }
+}
+
+function originValidationMiddleware(req, res, next) {
+    let origin = req.headers.referer;
+    const isOriginValid = validateOrigin(origin);
+
+    if (isOriginValid) {
+        next();
+    } else {
+        console.warn("Blocked request from origin:", { origin });
+        res.status(403).json({ error: 'Forbidden' });
+    }
+}
+
+// CORS configuration
+const corsOptions = {
+    origin: allowedOrigins,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
 // Middleware setup
 app.use(cors(corsOptions));
 app.use(express.json());
@@ -302,6 +332,7 @@ app.use('/js/marked', express.static(
 app.use('/api', originValidationMiddleware);
 
 generatePWAManifest(SITE_TITLE);
+
 app.use(express.static(path.join(__dirname, 'public'), {
     index: false
 }));
