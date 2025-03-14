@@ -304,13 +304,13 @@ document.addEventListener('DOMContentLoaded', () => {
             previewContainer.style.display = 'block';
             editorContainer.style.display = 'none';
             previewMarkdownBtn.classList.add('active');
-            statusManager.show('Markdown Preview On');
+            statusManager.show('Markdown Preview On', 'success', 700);
         } else {
             previewContainer.style.display = 'none';
             editorContainer.style.display = 'block';
             previewMarkdownBtn.classList.remove('active');
             editor.focus();
-            statusManager.show('Markdown Preview Off', 'error');
+            statusManager.show('Markdown Preview Off', 'error', 700);
         }
 
         collaborationManager.updateLocalCursor();
@@ -401,7 +401,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }));
             }
             
-            statusManager.show('Saved');
+            statusManager.show('Saved', 'success', 500);
             lastSaveTime = Date.now();
         } catch (err) {
             console.error('Error saving notes:', err);
@@ -444,11 +444,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 const errorData = await response.json();
                 throw new Error(errorData.error || 'Failed to delete notepad');
             }
-            
-            await loadNotepads();
 
             // select previous notepad
-            selectNextNotepad(false);
+            await selectNextNotepad(false);
+
+            await loadNotepads();
             
             if (collaborationManager.ws && collaborationManager.ws.readyState === WebSocket.OPEN) {
                 collaborationManager.ws.send(JSON.stringify({

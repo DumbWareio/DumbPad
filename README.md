@@ -79,6 +79,10 @@ services:
       # Use ALLOWED_ORIGINS below to allow all origins or specify a list
       # Usage: '*' to allow all OR Comma-separated list of urls: 'http://internalip:port,https://base.proxy.tld,https://authprovider.domain.tld'
       # ALLOWED_ORIGINS: '*'
+      # LOCKOUT_TIME: 15 # Customize pin lockout time (if empty, defaults to 15 in minutes)
+      # MAX_ATTEMPTS: 5 # Customize pin max attempts (if empty, defaults to 5)
+      # COOKIE_MAX_AGE: 24 # Customize maximum age of cookies primarily used for pin verification (default 24) in hours
+      # PAGE_HISTORY_COOKIE_AGE: 365 # Customize age of cookie to show the last notepad opened (default 365 | max 400) in days - shows default notepad on load if expired
 ```
 
 Then run:
@@ -103,6 +107,7 @@ PORT=3000                  # Port to run the server on
 DUMBPAD_PIN=1234          # Optional PIN protection
 SITE_TITLE=DumbPad        # Custom site title
 BASE_URL=http://localhost:3000  # Base URL for the application
+NODE_ENV=production       # Defaults to development (production required for cors)
 ```
 
 3. Start the server:
@@ -129,6 +134,7 @@ docker run -p 3000:3000 -v "${PWD}\data:/app/data" dumbwareio/dumbpad:latest
 * 🔍 Fuzzy Search by name or contents
 * 🖨️ Print functionality
 * 🔄 Real-time saving
+* 💽 Add .txt files into data folder to import (requires page refresh) 
 * ⚡ Zero dependencies on client-side
 * 🛡️ Built-in security features
 * 🎨 Clean, modern interface
@@ -185,6 +191,7 @@ docker run -p 3000:3000 -v "${PWD}\data:/app/data" dumbwareio/dumbpad:latest
 The `data` directory contains:
 - `notepads.json`: List of all notepads
 - Individual `.txt` files for each notepad's content
+- Drop in .txt files to import notes (requires page refresh)
 
 ⚠️ Important: Never delete the `data` directory when updating! This is where all your notes are stored.
 

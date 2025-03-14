@@ -11,11 +11,128 @@ const { generatePWAManifest } = require("./scripts/pwa-manifest-generator")
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const NODE_ENV = process.env.NODE_ENV || 'development'
+const DATA_DIR = path.join(__dirname, 'data');
+const PUBLIC_DIR = path.join(__dirname, "public");
+const NOTEPADS_FILE = path.join(DATA_DIR, 'notepads.json');
+const SITE_TITLE = process.env.SITE_TITLE || 'DumbPad';
+const PIN = process.env.DUMBPAD_PIN;
+const COOKIE_NAME = 'dumbpad_auth';
+const COOKIE_MAX_AGE = process.env.COOKIE_MAX_AGE || 24; // default 24 in hours
+const cookieMaxAge = COOKIE_MAX_AGE * 60 * 60 * 1000; // in hours
+const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
+const PAGE_HISTORY_COOKIE = 'dumbpad_page_history';
+const PAGE_HISTORY_COOKIE_AGE = process.env.PAGE_HISTORY_COOKIE_AGE || 365; // defaults to 1 Year in days
+const pageHistoryCookieAge = PAGE_HISTORY_COOKIE_AGE * 24 * 60 * 60 * 1000;
+let notepads_cache = {
+    notepads: [],
+    index: null,
+};
+
 const server = app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
     console.log(`Base URL: ${BASE_URL}`);
-    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`Environment: ${NODE_ENV}`);
 });
+
+// Trust proxy - required for secure cookies behind a reverse proxy
+app.set('trust proxy', 1);
+
+// CORS Setup
+function setupOrigins() {
+    const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS;
+    let allowedOrigins = [ BASE_URL ];
+    if (NODE_ENV === 'development' || ALLOWED_ORIGINS === '*') {
+        allowedOrigins = '*';
+    }
+    else if (ALLOWED_ORIGINS && typeof ALLOWED_ORIGINS === 'string') {
+        try {
+            const allowed = ALLOWED_ORIGINS.split(',').map(origin => origin.trim());
+            allowed.forEach(origin => {
+                const normalizedOrigin = normalizeOrigin(origin);
+                if (normalizedOrigin !== BASE_URL) allowedOrigins.push(normalizedOrigin);
+            });
+        }
+        catch (error) {
+            console.error(`Error setting up ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}:`, error);
+        }
+    }
+    console.log("ALLOWED ORIGINS:", allowedOrigins);
+    return allowedOrigins;
+}
+
+function normalizeOrigin(origin) {
+    if (origin) {
+        try {
+            console.log("Validating Origin:", origin);
+            const normalizedOrigin = new URL(origin).origin;
+            console.log("Normalized Url:", normalizedOrigin);
+            return normalizedOrigin;
+        } catch (error) {
+            console.error("Error parsing referer URL:", error);
+            throw new Error("Error parsing referer URL:", error);
+        }
+    }
+}
+
+function validateOrigin(origin) {
+    if (NODE_ENV === 'development' || allowedOrigins === '*') return true;
+
+    try {
+        if (origin) origin = normalizeOrigin(origin);
+        else {
+            console.warn("No origin to validate.");
+            return false;
+        }
+
+        if (origin === BASE_URL || allowedOrigins.includes(origin)) return true; 
+        else {
+            console.warn("Blocked request from origin:", { origin });
+            return false;
+        }
+    }
+    catch (error) {
+        console.error(error);
+    }
+}
+
+function originValidationMiddleware(req, res, next) {
+    let origin = req.headers.referer;
+    const isOriginValid = validateOrigin(origin);
+
+    if (isOriginValid) {
+        next();
+    } else {
+        console.warn("Blocked request from origin:", { origin });
+        res.status(403).json({ error: 'Forbidden' });
+    }
+}
+
+const allowedOrigins = setupOrigins();
+const corsOptions = {
+    origin: allowedOrigins,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
+// Middleware setup
+app.use(cors(corsOptions));
+app.use(express.json());
+app.use(cookieParser());
+// Serve the marked library to clients
+app.use('/js/marked', express.static(
+    path.join(__dirname, 'node_modules/marked/lib')
+));
+
+// Apply origin validation to all /api routes
+app.use('/api', originValidationMiddleware);
+
+generatePWAManifest(SITE_TITLE);
+
+app.use(express.static(path.join(__dirname, 'public'), {
+    index: false
+}));
 
 // Set up WebSocket server
 const wss = new WebSocket.Server({ server, verifyClient: (info, done) => {
@@ -166,25 +283,11 @@ wss.on('connection', (ws) => {
     });
 });
 
-const DATA_DIR = path.join(__dirname, 'data');
-const PUBLIC_DIR = path.join(__dirname, "public");
-const NOTEPADS_FILE = path.join(DATA_DIR, 'notepads.json');
-const SITE_TITLE = process.env.SITE_TITLE || 'DumbPad';
-const PIN = process.env.DUMBPAD_PIN;
-const COOKIE_NAME = 'dumbpad_auth';
-const COOKIE_MAX_AGE = 24 * 60 * 60 * 1000; // 24 hours
-const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
-const PAGE_HISTORY_COOKIE = 'dumbpad_page_history';
-const PAGE_HISTORY_COOKIE_AGE = 365 * 24 * 60 * 60 * 1000; // 1 Year
-let notepads_cache = {
-    notepads: [],
-    index: null,
-};
-
 // Brute force protection
 const loginAttempts = new Map();
-const MAX_ATTEMPTS = 5;
-const LOCKOUT_TIME = 15 * 60 * 1000; // 15 minutes in milliseconds
+const MAX_ATTEMPTS = process.env.MAX_ATTEMPTS || 5; // default to 5
+const LOCKOUT_TIME = process.env.LOCKOUT_TIME || 15; // default 15 minutes
+const lockOutTime = LOCKOUT_TIME * 60 * 1000; // in milliseconds
 
 // Reset attempts for an IP
 function resetAttempts(ip) {
@@ -198,7 +301,7 @@ function isLockedOut(ip) {
     
     if (attempts.count >= MAX_ATTEMPTS) {
         const timeElapsed = Date.now() - attempts.lastAttempt;
-        if (timeElapsed < LOCKOUT_TIME) {
+        if (timeElapsed < lockOutTime) {
             return true;
         }
         resetAttempts(ip);
@@ -218,7 +321,7 @@ function recordAttempt(ip) {
 setInterval(() => {
     const now = Date.now();
     for (const [ip, attempts] of loginAttempts.entries()) {
-        if (now - attempts.lastAttempt >= LOCKOUT_TIME) {
+        if (now - attempts.lastAttempt >= lockOutTime) {
             loginAttempts.delete(ip);
         }
     }
@@ -243,109 +346,6 @@ function secureCompare(a, b) {
     }
 }
 
-// Trust proxy - required for secure cookies behind a reverse proxy
-app.set('trust proxy', 1);
-const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS;
-let allowedOrigins = [ BASE_URL ];
-if (ALLOWED_ORIGINS === '*' || process.env.NODE_ENV !== 'production') {
-    allowedOrigins = '*';
-}
-else if (ALLOWED_ORIGINS && typeof ALLOWED_ORIGINS === 'string') {
-    try {
-        const allowed = ALLOWED_ORIGINS.split(',').map(origin => origin.trim());
-        allowed.forEach(origin => {
-            const normalizedOrigin = normalizeOrigin(origin);
-            if (normalizedOrigin !== BASE_URL) allowedOrigins.push(normalizedOrigin);
-        });
-    }
-    catch (error) {
-        console.error(`Error setting up ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}:`, error);
-    }
-}
-console.log("ALLOWED ORIGINS:", allowedOrigins);
-
-function normalizeOrigin(origin) {
-    if (origin) {
-        try {
-            console.log("Validating Origin:", origin);
-            const normalizedOrigin = new URL(origin).origin;
-            console.log("Normalized Url:", normalizedOrigin);
-            return normalizedOrigin;
-        } catch (error) {
-            console.error("Error parsing referer URL:", error);
-            throw new Error("Error parsing referer URL:", error);
-        }
-    }
-}
-
-function validateOrigin(origin) {
-    if (process.env.NODE_ENV === 'development' || allowedOrigins === '*') return true;
-
-    try {
-        if (origin) origin = normalizeOrigin(origin);
-        else {
-            console.warn("No origin to validate.");
-            return false;
-        }
-
-        if (origin === BASE_URL || allowedOrigins.includes(origin)) return true; 
-        else {
-            console.warn("Blocked request from origin:", { origin });
-            return false;
-        }
-    }
-    catch (error) {
-        console.error(error);
-    }
-}
-
-function originValidationMiddleware(req, res, next) {
-    let origin = req.headers.referer;
-    const isOriginValid = validateOrigin(origin);
-
-    if (isOriginValid) {
-        next();
-    } else {
-        console.warn("Blocked request from origin:", { origin });
-        res.status(403).json({ error: 'Forbidden' });
-    }
-}
-
-// CORS configuration
-const corsOptions = {
-    origin: allowedOrigins,
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-};
-
-// Middleware setup
-app.use(cors(corsOptions));
-app.use(express.json());
-app.use(cookieParser());
-// Serve the marked library to clients
-app.use('/js/marked', express.static(
-    path.join(__dirname, 'node_modules/marked/lib')
-));
-
-// Apply origin validation to all /api routes
-app.use('/api', originValidationMiddleware);
-
-generatePWAManifest(SITE_TITLE);
-
-app.use(express.static(path.join(__dirname, 'public'), {
-    index: false
-}));
-
-// Serve the pwa/asset manifest
-app.get("/asset-manifest.json", (req, res) => {
-    // generated in pwa-manifest-generator and fetched from service-worker.js
-    res.sendFile(path.join(PUBLIC_DIR, "asset-manifest.json"));
-  });
-app.get("/manifest.json", (req, res) => {
-    res.sendFile(path.join(PUBLIC_DIR, "manifest.json"));
-  });
-
 // Main app route with PIN check
 app.get('/', (req, res) => {
     const pin = process.env.DUMBPAD_PIN;
@@ -363,6 +363,15 @@ app.get('/', (req, res) => {
 
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
+
+// Serve the pwa/asset manifest
+app.get("/asset-manifest.json", (req, res) => {
+    // generated in pwa-manifest-generator and fetched from service-worker.js
+    res.sendFile(path.join(PUBLIC_DIR, "asset-manifest.json"));
+  });
+app.get("/manifest.json", (req, res) => {
+    res.sendFile(path.join(PUBLIC_DIR, "manifest.json"));
+  });
 
 // Login page route
 app.get('/login', (req, res) => {
@@ -389,9 +398,9 @@ app.post('/api/verify-pin', (req, res) => {
     // Check if IP is locked out
     if (isLockedOut(ip)) {
         const attempts = loginAttempts.get(ip);
-        const timeLeft = Math.ceil((LOCKOUT_TIME - (Date.now() - attempts.lastAttempt)) / 1000 / 60);
+        const timeLeft = Math.ceil((lockOutTime - (Date.now() - attempts.lastAttempt)) / 1000 / 60);
         return res.status(429).json({ 
-            error: `Too many attempts. Please try again in ${timeLeft} minutes.`
+            error: `Too many attempts. Please try again in ${timeLeft} minute(s).`
         });
     }
 
@@ -409,9 +418,9 @@ app.post('/api/verify-pin', (req, res) => {
         // Set secure HTTP-only cookie
         res.cookie(COOKIE_NAME, pin, {
             httpOnly: true,
-            secure: req.secure || (BASE_URL.startsWith("https") && process.env.NODE_ENV === 'production'),
+            secure: req.secure || (BASE_URL.startsWith("https") && NODE_ENV === 'production'),
             sameSite: 'strict',
-            maxAge: COOKIE_MAX_AGE
+            maxAge: cookieMaxAge
         });
         res.json({ success: true });
     } else {
@@ -511,9 +520,40 @@ async function ensureDataDir() {
 }
 
 async function loadNotepadsList() {
+    const notepadsList = await getNotepadsFromDir();
+    return notepadsList || [];
+}
+
+async function getNotepadsFromDir() {
     await ensureDataDir();
-    const data = JSON.parse(await fs.readFile(NOTEPADS_FILE, 'utf8'));
-    return data.notepads || [];
+    let notepadsData = { notepads: [] };
+    try {
+        const fileContent = await fs.readFile(NOTEPADS_FILE, 'utf8');
+        notepadsData = JSON.parse(fileContent);
+    } catch (readError) {
+        // If notepads.json doesn't exist or is invalid, start with an empty array
+        if (readError.code !== 'ENOENT') {
+            console.error('Error reading notepads.json:', readError);
+        }
+    }
+
+    const notepads = notepadsData.notepads || [];
+
+    const dataFiles = await fs.readdir(DATA_DIR);
+    const txtFiles = dataFiles
+        .filter(file => file.endsWith('.txt'))
+        .map(file => path.parse(file).name); // Extract filename without extension
+
+    const newNotepads = txtFiles.filter(txtFile => !notepads.some(notepad => notepad.id === txtFile))
+        .map(txtFile => ({ id: txtFile, name: txtFile }));
+
+    if (newNotepads.length > 0) {
+        notepadsData.notepads = [...notepads, ...newNotepads];
+        await fs.writeFile(NOTEPADS_FILE, JSON.stringify(notepadsData, null, 2), 'utf8');
+        console.log(`Added new notepads: ${newNotepads.map(n => n.id).join(', ')}`);
+    }
+
+    return notepadsData.notepads;
 }
 
 /* Notepad Search Functionality */
@@ -639,9 +679,9 @@ app.post('/api/notepads', async (req, res) => {
         // Set new notes as the current page in cookies.
         res.cookie(PAGE_HISTORY_COOKIE, id, {
             httpOnly: true,
-            secure: req.secure || (BASE_URL.startsWith("https") && process.env.NODE_ENV === 'production'),
+            secure: req.secure || (BASE_URL.startsWith("https") && NODE_ENV === 'production'),
             sameSite: 'strict',
-            maxAge: PAGE_HISTORY_COOKIE_AGE
+            maxAge: pageHistoryCookieAge
         });
 
         await fs.writeFile(NOTEPADS_FILE, JSON.stringify(data));
@@ -682,9 +722,9 @@ app.get('/api/notes/:id', async (req, res) => {
         // Set loaded notes as the current page in cookies.
         res.cookie(PAGE_HISTORY_COOKIE, id, {
             httpOnly: true,
-            secure: req.secure || (BASE_URL.startsWith("https") && process.env.NODE_ENV === 'production'),
+            secure: req.secure || (BASE_URL.startsWith("https") && NODE_ENV === 'production'),
             sameSite: 'strict',
-            maxAge: PAGE_HISTORY_COOKIE_AGE
+            maxAge: pageHistoryCookieAge
         });
 
         res.json({ content: notes });
