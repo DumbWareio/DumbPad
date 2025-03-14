@@ -624,8 +624,12 @@ code {
     font-weight: bold;
 }
 
-
-@media (max-width: 1640px) {
+@media(max-width: 1400px) {
+    #header-title {
+        font-size: 1.2rem;
+    }
+}
+@media (max-width: 1300px) {
     .container {
         max-width: 95%;
         padding: 0.3rem;
@@ -661,8 +665,7 @@ code {
     }
 
     .editor-container, .preview-container {
-        /* min-height: 84vh; */
-        max-height: 84vh;
+        max-height: 83vh;
     }
 
     .notepad-controls-wrapper {
