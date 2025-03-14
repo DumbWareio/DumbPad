@@ -758,12 +758,40 @@ document.addEventListener('DOMContentLoaded', () => {
         searchManager.addEventListeners();
     }
 
+    const detectOS = () => {
+        const userAgent = navigator.userAgent;
+        const isMac = /Macintosh|Mac OS X/i.test(userAgent);
+        return isMac;
+    }
+
     const setupToolTips = () => {
         // Check if it's a mobile device using a media query or pointer query
         const isMobile = window.matchMedia('(max-width: 585px)').matches || window.matchMedia('(pointer: coarse)').matches;
         if (isMobile) return;
+
+        const isMac = detectOS();
         
         tooltips.forEach((element) => {
+            let tooltipText = element.getAttribute('data-tooltip');
+            const shortcutsStr = element.getAttribute('data-shortcuts');
+
+            if (tooltipText && shortcutsStr) {
+                try {
+                    const shortcuts = JSON.parse(shortcutsStr);
+                    let shortcutToUse = isMac ? shortcuts.mac : shortcuts.win;
+    
+                    if (shortcutToUse) {
+                        tooltipText = tooltipText.replace(`{shortcut}`, shortcutToUse);
+                        element.setAttribute('data-tooltip', tooltipText);
+                    } else {
+                        console.warn(`No shortcut found for ${isMac ? 'mac' : 'win'}`);
+                    }
+    
+                } catch (error) {
+                    console.error("Error parsing shortcuts:", error);
+                }
+            }
+
             let tooltip = document.createElement('div');
             tooltip.classList.add('tooltip');
             document.body.appendChild(tooltip);
