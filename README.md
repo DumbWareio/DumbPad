@@ -2,7 +2,7 @@
 
 A stupid simple, no auth (unless you want it!), modern notepad application with auto-save functionality and dark mode support.
 
-![image](https://github.com/user-attachments/assets/cb29ba21-ede0-4765-98b5-4e76c7c84ac3)
+![image](https://github.com/user-attachments/assets/c7138bc4-3a9f-456a-a049-67a03a2f45a5)
 
 ## Table of Contents
 - [Features](#features)
