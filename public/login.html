@@ -4,10 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title id="page-title">DumbPad - Login</title>
-    <link rel="icon" type="image/svg+xml" href="Assets/dumbpad.svg">
-    <link rel="alternate icon" type="image/png" href="Assets/dumbpad.png">
-    <link rel="apple-touch-icon" href="Assets/dumbpad.png">
-    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" type="image/svg+xml" href="assets/dumbpad.svg">
+    <link rel="alternate icon" type="image/png" href="assets/dumbpad.png">
+    <link rel="apple-touch-icon" href="assets/dumbpad.png">
+    <link rel="stylesheet" href="assets/styles.css">
+    <script>
+        (function() { // Prevent theme flicker by setting theme immediately
+            const theme = localStorage.getItem('dumbpad_theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
 </head>
 <body class="light-mode">
     <div class="container login-container">

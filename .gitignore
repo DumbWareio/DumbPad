@@ -144,3 +144,4 @@ Thumbs.db
 
 # Generated PWA Files
 /public/*manifest.json
+/public/assets/*manifest.json

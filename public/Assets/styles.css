@@ -15,7 +15,7 @@
     --code-markdown: rgba(37, 100, 235, 0.2);
 }
 
-.dark-mode {
+[data-theme="dark"] {
     --bg-color: #1a1a1a;
     --text-color: #e5e7eb;
     --primary-color: #60a5fa;
@@ -190,6 +190,7 @@ code {
     box-sizing: border-box;
     word-wrap: break-word;
     font-size: 0.875rem;
+    text-align: center;
 }
 
 .toast.show {
@@ -285,7 +286,7 @@ code {
     color: var(--text-color);
 }
 
-#rename-input {
+.modal-input {
     width: 100%;
     padding: 0.75rem;
     margin-bottom: 1rem;
@@ -311,12 +312,12 @@ code {
     transition: background-color 0.2s;
 }
 
-#rename-cancel, #download-cancel {
+#rename-cancel, #download-cancel, #settings-cancel {
     background-color: var(--secondary-color);
     color: var(--text-color);
 }
 
-#rename-confirm, #download-txt, #download-md {
+#rename-confirm, #download-txt, #download-md, #settings-save {
     background-color: var(--primary-color);
     color: white;
 }
@@ -560,7 +561,8 @@ code {
 
 /* Search styles */
 /* Scoped Search Styles */
-#search-modal {
+#search-modal.modal {
+    display: none;
     position: fixed;
     top: 0;
     left: 0;
@@ -699,7 +701,7 @@ code {
 
     .header-right {
         position: static;
-        gap: 4rem;
+        gap: 2rem;
     }
 
     #header-title {

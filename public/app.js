@@ -1,19 +1,24 @@
-import { OperationsManager, OperationType } from './operations.js';
-import { CollaborationManager } from './collaboration.js';
-import { CursorManager } from './cursor-manager.js';
-import { StatusManager } from './status.js';
-import SearchManager from './search.js';
+import { OperationsManager, OperationType } from './managers/operations.js';
+import { CollaborationManager } from './managers/collaboration.js';
+import { CursorManager } from './managers/cursor-manager.js';
+import { ToastManager } from './managers/toaster.js';
+import SearchManager from './managers/search.js';
+import StorageManager from './managers/storage.js';
+import SettingsManager from './managers/settings.js'
 import { marked } from '/js/marked/marked.esm.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     const DEBUG = false;
     let isPreviewMode = false;
+    const THEME_KEY = 'dumbpad_theme';
+    const storageManager = new StorageManager();
+    const settingsManager = new SettingsManager(storageManager);
     const editorContainer = document.getElementById('editor-container');
     const editor = document.getElementById('editor');
     const previewContainer = document.getElementById('preview-container');
     const previewPane = document.getElementById('preview-pane');
     const themeToggle = document.getElementById('theme-toggle');
-    const statusManager = new StatusManager(document.getElementById('toast-container'));
+    const toaster = new ToastManager(document.getElementById('toast-container'));
     const notepadSelector = document.getElementById('notepad-selector');
     const newNotepadBtn = document.getElementById('new-notepad');
     const renameNotepadBtn = document.getElementById('rename-notepad');
@@ -33,22 +38,34 @@ document.addEventListener('DOMContentLoaded', () => {
     const downloadTxt = document.getElementById('download-txt');
     const downloadMd = document.getElementById('download-md');
     const downloadCancel = document.getElementById('download-cancel');
+    const settingsButton = document.getElementById('settings-button');
+    const settingsModal = document.getElementById('settings-modal');
+    const settingsCancel = document.getElementById('settings-cancel');
+    const settingsSave = document.getElementById('settings-save');
+    const settingsReset = document.getElementById('settings-reset');
+    const settingsAutoSaveStatusInterval = document.getElementById('autosave-status-interval-input');
+    let currentTheme =  storageManager.load(THEME_KEY);
+    const defaultToastMessageTimeout = 1000;
+    let saveStatusMessageInterval = defaultToastMessageTimeout;
 
     // Theme handling
-    const THEME_KEY = 'dumbpad_theme';
-    let currentTheme = localStorage.getItem(THEME_KEY) || 'light';
-    
-    // Apply initial theme
-    document.body.classList.toggle('dark-mode', currentTheme === 'dark');
-    themeToggle.innerHTML = currentTheme === 'dark' ? '<span class="sun">☀</span>' : '<span class="moon">☽</span>';
+    const initializeTheme = () => {
+        if (!currentTheme) {
+            currentTheme = (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+            storageManager.save(THEME_KEY, currentTheme);
+        }
+        themeToggle.innerHTML = currentTheme === 'dark' ? '<span class="sun">☀</span>' : '<span class="moon">☽</span>';
+        // document.documentElement.setAttribute('data-theme', currentTheme); // Handled in index.html
+    }
+
     const addThemeEventListeners = () => {
         // Theme toggle handler
         themeToggle.addEventListener('click', () => {
             currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
-            document.body.classList.toggle('dark-mode');
+            document.documentElement.setAttribute('data-theme', currentTheme);
             themeToggle.innerHTML = currentTheme === 'dark' ? '<span class="sun">☀</span>' : '<span class="moon">☽</span>';
             inheritEditorStyles(previewPane);
-            localStorage.setItem(THEME_KEY, currentTheme);
+            storageManager.save(THEME_KEY, currentTheme);
         });
     }
     
@@ -66,7 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } 
         catch (error) {
             console.log(error);
-            statusManager.show(error, "error");
+            toaster.show(error, "error", true);
         }
     };
 
@@ -304,13 +321,13 @@ document.addEventListener('DOMContentLoaded', () => {
             previewContainer.style.display = 'block';
             editorContainer.style.display = 'none';
             previewMarkdownBtn.classList.add('active');
-            statusManager.show('Markdown Preview On', 'success', 700);
+            toaster.show('Markdown Preview On', 'success');
         } else {
             previewContainer.style.display = 'none';
             editorContainer.style.display = 'block';
             previewMarkdownBtn.classList.remove('active');
             editor.focus();
-            statusManager.show('Markdown Preview Off', 'error', 700);
+            toaster.show('Markdown Preview Off', 'error');
         }
 
         collaborationManager.updateLocalCursor();
@@ -346,10 +363,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 }));
             }
 
-            statusManager.show(`New notepad: ${newNotepad.name}`, 'success', 3000)
+            toaster.show(`New notepad: ${newNotepad.name}`, 'success')
         } catch (err) {
             console.error('Error creating notepad:', err);
-            statusManager.show('Error creating notepad', 'error', 3000)
+            toaster.show('Error creating notepad', 'error', true);
         }
     };
 
@@ -375,10 +392,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 }));
             }
 
-            statusManager.show('Renamed notepad')
+            toaster.show('Renamed notepad')
         } catch (err) {
             console.error('Error renaming notepad:', err);
-            statusManager.show('Error renaming notepad', 'error', 3000)
+            toaster.show('Error renaming notepad', 'error', true);
         }
     };
 
@@ -401,11 +418,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 }));
             }
             
-            statusManager.show('Saved', 'success', 500);
             lastSaveTime = Date.now();
         } catch (err) {
             console.error('Error saving notes:', err);
-            statusManager.show('Error saving', 'error', 3000);
+            toaster.show('Error saving', 'error', false, 3000);
         }
     };
 
@@ -414,14 +430,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const now = Date.now();
         if (now - lastSaveTime >= SAVE_INTERVAL) {
             saveNotes(content);
+            toaster.show('Saved', 'success', false, saveStatusMessageInterval);
         }
     };
 
     // Debounced save
     const debouncedSave = (content) => {
         clearTimeout(saveTimeout);
-        saveTimeout = setTimeout(() => {
-            saveNotes(content);
+        saveTimeout = setTimeout(async () => {
+            await saveNotes(content);
+            toaster.show('Saved', 'success', false, saveStatusMessageInterval); // Bypassed if interval is 0
         }, 300);
     };
 
@@ -429,7 +447,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const deleteNotepad = async () => {
         try {
             if (currentNotepadId === 'default') {
-                alert('Cannot delete the default notepad');
+                toaster.show('Cannot delete the default notepad', 'error');
                 return;
             }
             
@@ -458,10 +476,10 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Hide Delete Modal
             deleteModal.classList.remove('visible');
-            statusManager.show('Notepad deleted')
+            toaster.show('Notepad deleted')
         } catch (err) {
             console.error('Error deleting notepad:', err);
-            statusManager.show('Error deleting notepad', 'error', 3000);
+            toaster.show('Error deleting notepad', 'error', true);
         }
     };
 
@@ -487,7 +505,7 @@ document.addEventListener('DOMContentLoaded', () => {
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
         
-        statusManager.show('Downloading...');
+        toaster.show('Downloading...');
     };
 
     // Print current notepad
@@ -534,7 +552,7 @@ document.addEventListener('DOMContentLoaded', () => {
             printWindow.close();
         }, 250);
 
-        statusManager.show('Printing...');
+        toaster.show('Printing...');
     };
 
     const getNotepadIndexById = (id) => {
@@ -586,6 +604,44 @@ document.addEventListener('DOMContentLoaded', () => {
         await selectNotepad(notepadSelector[newIndex].value);
     }
 
+    const loadSettings = () => {
+        const currentSettings = settingsManager.getSettings();
+        if (currentSettings) {
+            saveStatusMessageInterval = currentSettings.saveStatusMessageInterval;
+            settingsAutoSaveStatusInterval.value = currentSettings.saveStatusMessageInterval;
+        }
+        return currentSettings;
+    }
+
+    const initializeDefaultSettings = (reset) => {
+        const currentSettings = loadSettings();
+        if (reset || !currentSettings) {
+            saveStatusMessageInterval = defaultToastMessageTimeout;
+            const defaultSettings = { 
+                saveStatusMessageInterval,
+            };
+            settingsManager.saveSettings(defaultSettings);
+        } 
+    }
+
+    const hideModal = (modal, toastMessage) => {
+        modal.classList.remove('visible');
+        if (toastMessage) toaster.show(toastMessage);
+        editor.focus();
+    }
+
+    const showModal = (modal, inputToFocus) => {
+        closeAllModals() // close any open modals
+        modal.classList.add('visible');
+        if (inputToFocus) inputToFocus.focus();
+    }
+
+    const closeAllModals = () => {
+        const modals = document.querySelectorAll('.modal');
+        if (modals) modals.forEach(m => hideModal(m));
+        searchManager.closeModal();
+    }
+
     const addNotepadControlsEventListeners = () => {
         notepadSelector.addEventListener('change', async (e) => {
             await selectNotepad(e.target.value);
@@ -594,80 +650,101 @@ document.addEventListener('DOMContentLoaded', () => {
         newNotepadBtn.addEventListener('click', createNotepad);
     
         renameNotepadBtn.addEventListener('click', () => {
+            closeAllModals() // close any open modals
             const currentNotepad = notepadSelector.options[notepadSelector.selectedIndex];
             renameInput.value = currentNotepad.text;
-            renameModal.classList.add('visible');
-            renameInput.focus();
-            renameInput.select();
+            showModal(renameModal, renameInput);
         });
         renameInput.addEventListener('keyup', async (e) => {
             if (e.key === 'Enter') {
                 const newName = renameInput.value.trim();
                 if (newName) {
                     await renameNotepad(newName);
-                    renameModal.classList.remove('visible');
+                    hideModal(renameModal);
                 }
-                editor.focus();
             }
         });
         renameCancel.addEventListener('click', () => {
-            renameModal.classList.remove('visible');
+            hideModal(renameModal);
         });
         renameConfirm.addEventListener('click', async () => {
             const newName = renameInput.value.trim();
             if (newName) {
                 await renameNotepad(newName);
-                renameModal.classList.remove('visible');
+                hideModal(renameModal);
             }
         });
         
         deleteNotepadBtn.addEventListener('click', () => {
             if (currentNotepadId === 'default') {
-                alert('Cannot delete the default notepad');
+                toaster.show('Cannot delete the default notepad', 'error');
                 return;
             }
-            deleteModal.classList.add('visible');
-            deleteCancel.focus();
+            showModal(deleteModal, deleteCancel);
         });
         deleteCancel.addEventListener('click', () => {
-            deleteModal.classList.remove('visible');
-            editor.focus();
+            hideModal(deleteModal);
         });
         deleteConfirm.addEventListener('click', async () => {
             await deleteNotepad();
-            editor.focus();
         });
     
         downloadNotepadBtn.addEventListener('click', () => {
-            downloadModal.classList.add('visible');
-            downloadCancel.focus();
+            showModal(downloadModal, downloadCancel);
         });
         downloadCancel.addEventListener('click', () => {
-            downloadModal.classList.remove('visible');
-            editor.focus();
+            hideModal(downloadModal);
         });
         downloadTxt.addEventListener('click', () => {
             // Download as TXT
             downloadNotepad('txt');
-            downloadModal.classList.remove('visible');
-            editor.focus();
+            hideModal(downloadModal);
         })
         downloadMd.addEventListener('click', () => {
             // Download as MD
             downloadNotepad('md');
-            downloadModal.classList.remove('visible');
-            editor.focus();
+            hideModal(downloadModal);
         });
 
         printNotepadBtn.addEventListener('click', () => {
             printNotepad();
-            editor.focus();
         });
         previewMarkdownBtn.addEventListener('click', toggleMarkdownPreview);
+
+        settingsButton.addEventListener('click', () => {
+            loadSettings();
+            showModal(settingsModal, settingsAutoSaveStatusInterval);
+        });
+        settingsCancel.addEventListener('click', () => {
+            hideModal(settingsModal);
+        });
+        settingsReset.addEventListener('click', () => {
+            initializeDefaultSettings(true);
+            hideModal(settingsModal, 'Settings reset');
+        });
+        settingsSave.addEventListener('click', () => {
+            saveStatusMessageInterval = parseInt(settingsAutoSaveStatusInterval.value);
+            const settingsToSave = { 
+                saveStatusMessageInterval,
+            };
+            settingsManager.saveSettings(settingsToSave);
+            hideModal(settingsModal, 'Settings Saved');
+        });
+        settingsAutoSaveStatusInterval.addEventListener('keyup', (e) => {
+            if (e.key === 'Enter') {
+                const newInterval = parseInt(settingsAutoSaveStatusInterval.value.trim());
+                if (newInterval >= 0) {
+                    settingsManager.saveSettings();
+                    hideModal(settingsModal, 'Settings Saved');
+                }
+            }
+        })
     }
 
     const addShortcutEventListeners = () => {
         document.addEventListener('keydown', async (e) => {
+            if (e.key === 'Escape') closeAllModals();
+
             const windowsModifier = e.ctrlKey;
             const macModifier = e.metaKey;
 
@@ -712,6 +789,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         selectNextNotepad();
                         break;
                     }
+                    case ',': {
+                        e.preventDefault();
+                        settingsButton.click();
+                        break;
+                    }
                     default:
                         break;
                }
@@ -720,7 +802,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 switch(e.key) {
                     case 's': {
                         e.preventDefault();
-                        saveNotes(editor.value);
+                        await saveNotes(editor.value);
+                        toaster.show('Saved');
                         break;
                     }
                     case 'p': {
@@ -740,17 +823,16 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    const addServiceWorkerEventListeners = () => {
+    const registerServiceWorker = () => {
         // Register PWA Service Worker
         if ("serviceWorker" in navigator) {
-            navigator.serviceWorker.register("/service-worker.js")
-                .then((reg) => console.log("Service Worker registered:", reg.scope))
-                .catch((err) => console.log("Service Worker registration failed:", err));
-        }
-    }
+           navigator.serviceWorker.register("/service-worker.js")
+               .then((reg) => console.log("Service Worker registered:", reg.scope))
+               .catch((err) => console.log("Service Worker registration failed:", err));
+       }
+   }
 
     const addEventListeners = () => {
-        addServiceWorkerEventListeners();
         addThemeEventListeners();
         addEditorEventListeners();
         addNotepadControlsEventListeners();
@@ -808,9 +890,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const searchManager = new SearchManager(fetchWithPin, selectNotepad, closeAllModals);
+
     // Initialize the app
-    const searchManager = new SearchManager(fetchWithPin, selectNotepad);
-    const initializeApp = () => {
+    const initializeApp = async () => {
         fetch(`/api/config`)
             .then(response => response.json())
             .then(config => {
@@ -825,19 +908,25 @@ document.addEventListener('DOMContentLoaded', () => {
             })
             .catch(err => {
                 console.error('Error loading site configuration:', err);
-                statusManager.show(err, "error", 30000);
+                toaster.show(err, "error", true);
             });
         
+        initializeTheme();
+        initializeDefaultSettings();
+
         addEventListeners();
         setupToolTips();
         marked.setOptions({ // Set up markdown parser
             breaks: true,
             gfm: true
         });
+
+        // Initialize WebSocket connection
+        collaborationManager.setupWebSocket();
+
+        registerServiceWorker();
     };
 
-    // Initialize WebSocket connection
-    collaborationManager.setupWebSocket();
 
     // Start the app
     initializeApp();
