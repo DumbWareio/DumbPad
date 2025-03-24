@@ -733,8 +733,12 @@ document.addEventListener('DOMContentLoaded', () => {
         settingsAutoSaveStatusInterval.addEventListener('keyup', (e) => {
             if (e.key === 'Enter') {
                 const newInterval = parseInt(settingsAutoSaveStatusInterval.value.trim());
-                if (newInterval >= 0) {
-                    settingsManager.saveSettings();
+                if (newInterval > -1) {
+                    saveStatusMessageInterval = newInterval;
+                    const settingsToSave = { 
+                        saveStatusMessageInterval,
+                    };
+                    settingsManager.saveSettings(settingsToSave);
                     hideModal(settingsModal, 'Settings Saved');
                 }
             }
