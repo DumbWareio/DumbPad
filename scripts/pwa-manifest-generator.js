@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const PUBLIC_DIR = path.join(__dirname, "..", "public");
-const ASSETS_DIR = path.join(PUBLIC_DIR, "assets");
+const ASSETS_DIR = path.join(PUBLIC_DIR, "Assets");
 
 function getFiles(dir, basePath = "/") {
   let fileList = [];
