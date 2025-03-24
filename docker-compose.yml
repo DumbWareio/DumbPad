@@ -1,25 +1,24 @@
 services:
   dumbpad:
     image: dumbwareio/dumbpad:latest
+    # build: .
     container_name: dumbpad
     restart: unless-stopped
     ports:
-      - 3001:3000
+      - ${DUMBPAD_PORT:-3000}:3000
     volumes:
-      - ./data:/app/data
+      - ${DUMBPAD_DATA_PATH:-./data}:/app/data
     environment:
       # The title shown in the web interface
-      SITE_TITLE: DumbPad
+      SITE_TITLE: ${DUMBPAD_SITE_TITLE:-DumbPad}
       # Optional PIN protection (leave empty to disable)
-      DUMBPAD_PIN: 1234
-      # production required for ALLOWED_ORIGINS / CORS
-      NODE_ENV: production # Defaults to development if empty
+      DUMBPAD_PIN: ${DUMBPAD_PIN:-}
       # The base URL for the application
-      BASE_URL: http://localhost:3001
-      # Use ALLOWED_ORIGINS below for CORS to allow all origins or specify a list
-      # Usage: '*' to allow all OR Comma-separated list of urls: 'http://internalip:port,https://base.proxy.tld,https://authprovider.domain.tld'
-      # ALLOWED_ORIGINS: '*'
-      # LOCKOUT_TIME: 15 # Customize pin lockout time (if empty, defaults to 15 in minutes)
-      # MAX_ATTEMPTS: 5 # Customize pin max attempts (if empty, defaults to 5)
-      # COOKIE_MAX_AGE: 24 # Customize maximum age of cookies primarily used for pin verification (default 24) in hours
-      # PAGE_HISTORY_COOKIE_AGE: 365 # Customize age of cookie to show the last notepad opened (default 365 | max 400) in days - shows default notepad on load if expired
+      BASE_URL: ${DUMBPAD_BASE_URL:-http://localhost:3000} # Use ALLOWED_ORIGINS below to restrict cors to specific origins
+      # (OPTIONAL)
+      # Usage: Comma-separated list of urls: http://localhost:port,http://internalip:port,https://base.proxy.tld,https://authprovider.domain.tld
+      # ALLOWED_ORIGINS: ${DUMBPAD_ALLOWED_ORIGINS:-http://localhost:3000} # Comment out to allow all origins (*)
+      # LOCKOUT_TIME: ${DUMBPAD_LOCK_TIME:-15} # Customize pin lockout time (if empty, defaults to 15 in minutes)
+      # MAX_ATTEMPTS: ${DUMBPAD_MAX_ATTEMPTS:-5} # Customize pin max attempts (if empty, defaults to 5)
+      # COOKIE_MAX_AGE: ${DUMBPAD_COOKIE_MAX_AGE:-24} # Customize maximum age of cookies primarily used for pin verification (default 24) in hours
+      # PAGE_HISTORY_COOKIE_AGE: ${DUMBPAD_PAGE_HISTORY_COOKIE_AGE:-365} # Customize age of cookie to show the last notepad opened (default 365 | max 400) in days - shows default notepad on load if expired

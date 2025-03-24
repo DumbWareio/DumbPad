@@ -1,16 +1,22 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title id="page-title">DumbPad - Simple Notes</title>
-    <link rel="icon" type="image/svg+xml" href="Assets/dumbpad.svg">
-    <link rel="alternate icon" type="image/png" href="Assets/dumbpad.png">
-    <link rel="apple-touch-icon" href="Assets/dumbpad.png">
-    <link rel="stylesheet" href="styles.css">
-    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/svg+xml" href="assets/dumbpad.svg">
+    <link rel="alternate icon" type="image/png" href="assets/dumbpad.png">
+    <link rel="apple-touch-icon" href="assets/dumbpad.png">
+    <link rel="stylesheet" href="assets/styles.css">
+    <link rel="manifest" href="assets/manifest.json">
+    <script>
+        (function() { // Prevent theme flicker by setting theme immediately
+            const theme = JSON.parse(localStorage.getItem('dumbpad_theme')) || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
 </head>
-<body class="light-mode">
+<body>
     <div class="container">
         <header>
             <div class="header-top">
@@ -21,6 +27,17 @@
                     <button id="search-open" class="icon-button" data-tooltip="Search ({shortcut})" data-shortcuts='{"win": "ctrl+k", "mac": "cmd+k"}'>
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" /><path d="M21 21l-6 -6" />
+                        </svg>
+                    </button>
+                    <button id="settings-button" class="icon-button" data-tooltip="Settings ({shortcut})" data-shortcuts='{"win": "ctrl+alt+,", "mac": "ctrl+cmd+,"}'>
+                        <svg  xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                            <path d="M14 6m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" />
+                            <path d="M4 6l8 0" /><path d="M16 6l4 0" />
+                            <path d="M8 12m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" />
+                            <path d="M4 12l2 0" /><path d="M10 12l10 0" />
+                            <path d="M17 18m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" />
+                            <path d="M4 18l11 0" /><path d="M19 18l1 0" />
                         </svg>
                     </button>
                     <button id="theme-toggle" class="icon-button" aria-label="Toggle dark mode">
@@ -103,7 +120,7 @@
         <div id="rename-modal" class="modal">
             <div class="modal-content">
                 <h2>Rename Notepad</h2>
-                <input type="text" id="rename-input" placeholder="Enter new name">
+                <input type="text" id="rename-input" class="modal-input" placeholder="Enter new name">
                 <div class="modal-buttons">
                     <button id="rename-cancel">Cancel</button>
                     <button id="rename-confirm">Rename</button>
@@ -132,10 +149,23 @@
             </div>
         </div>
         <!-- Fuzzy Search Modal -->
-        <div id="search-modal" class="search-modal hidden">
+        <div id="search-modal" class="modal hidden">
             <div class="search-modal-content">
                 <input type="text" id="search-box" placeholder="Search notes..." autofocus />
                 <ul id="search-results"></ul>
+            </div>
+        </div>
+        <!-- Settings Modal -->
+        <div id="settings-modal" class="modal">
+            <div class="modal-content">
+                <h2>Settings</h2>
+                <label class="modal-message">Auto Save Status Interval:</label>
+                <input id="autosave-status-interval-input" class="modal-input" type="number" min="0" value="0" placeholder="Milliseconds - 0 to disable"/>
+                <div class="modal-buttons">
+                    <button id="settings-cancel">Cancel</button>
+                    <button id="settings-reset" class="danger">Reset</button>
+                    <button id="settings-save">Save</button>
+                </div>
             </div>
         </div>
     </div>

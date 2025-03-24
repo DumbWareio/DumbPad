@@ -63,26 +63,23 @@ services:
     container_name: dumbpad
     restart: unless-stopped
     ports:
-      - 3000:3000
+      - ${DUMBPAD_PORT:-3000}:3000
     volumes:
-      # Where your notes will be stored
-      - ./data:/app/data
+      - ${DUMBPAD_DATA_PATH:-./data}:/app/data
     environment:
       # The title shown in the web interface
-      SITE_TITLE: DumbPad
+      SITE_TITLE: ${DUMBPAD_SITE_TITLE:-DumbPad}
       # Optional PIN protection (leave empty to disable)
-      DUMBPAD_PIN: 1234
-      # production required for ALLOWED_ORIGINS
-      NODE_ENV: production
+      DUMBPAD_PIN: ${DUMBPAD_PIN:-}
       # The base URL for the application
-      BASE_URL: http://localhost:3000
-      # Use ALLOWED_ORIGINS below to allow all origins or specify a list
-      # Usage: '*' to allow all OR Comma-separated list of urls: 'http://internalip:port,https://base.proxy.tld,https://authprovider.domain.tld'
-      # ALLOWED_ORIGINS: '*'
-      # LOCKOUT_TIME: 15 # Customize pin lockout time (if empty, defaults to 15 in minutes)
-      # MAX_ATTEMPTS: 5 # Customize pin max attempts (if empty, defaults to 5)
-      # COOKIE_MAX_AGE: 24 # Customize maximum age of cookies primarily used for pin verification (default 24) in hours
-      # PAGE_HISTORY_COOKIE_AGE: 365 # Customize age of cookie to show the last notepad opened (default 365 | max 400) in days - shows default notepad on load if expired
+      BASE_URL: ${DUMBPAD_BASE_URL:-http://localhost:3000} # Use ALLOWED_ORIGINS below to restrict cors to specific origins
+      # (OPTIONAL)
+      # Usage: Comma-separated list of urls: http://localhost:port,http://internalip:port,https://base.proxy.tld,https://authprovider.domain.tld
+      # ALLOWED_ORIGINS: ${DUMBPAD_ALLOWED_ORIGINS:-http://localhost:3000} # Comment out to allow all origins (*)
+      # LOCKOUT_TIME: ${DUMBPAD_LOCK_TIME:-15} # Customize pin lockout time (if empty, defaults to 15 in minutes)
+      # MAX_ATTEMPTS: ${DUMBPAD_MAX_ATTEMPTS:-5} # Customize pin max attempts (if empty, defaults to 5)
+      # COOKIE_MAX_AGE: ${DUMBPAD_COOKIE_MAX_AGE:-24} # Customize maximum age of cookies primarily used for pin verification (default 24) in hours
+      # PAGE_HISTORY_COOKIE_AGE: ${DUMBPAD_PAGE_HISTORY_COOKIE_AGE:-365} # Customize age of cookie to show the last notepad opened (default 365 | max 400) in days - shows default notepad on load if expired
 ```
 
 Then run:
@@ -101,13 +98,12 @@ docker compose up -d
 npm install
 ```
 
-2. Set environment variables in `.env`:
+2. Set environment variables in `.env` or `cp .env.example .env`:
 ```bash
 PORT=3000                  # Port to run the server on
 DUMBPAD_PIN=1234          # Optional PIN protection
 SITE_TITLE=DumbPad        # Custom site title
 BASE_URL=http://localhost:3000  # Base URL for the application
-NODE_ENV=production       # Defaults to development (production required for cors)
 ```
 
 3. Start the server:
@@ -139,17 +135,24 @@ docker run -p 3000:3000 -v "${PWD}\data:/app/data" dumbwareio/dumbpad:latest
 * 🛡️ Built-in security features
 * 🎨 Clean, modern interface
 * 📦 Docker support with easy configuration
+* 🌐 Optional CORS support
 
 ## Configuration
 
 ### Environment Variables
 
-| Variable      | Description                                | Default               | Required |
-|--------------|--------------------------------------------|-----------------------|----------|
-| PORT         | Server port                                | 3000                  | No       |
-| BASE_URL     | Base URL for the application              | http://localhost:PORT | Yes       |
-| DUMBPAD_PIN  | PIN protection (4-10 digits)              | None                  | No       |
-| SITE_TITLE   | Site title displayed in header            | DumbPad               | No       |
+| Variable                  | Description                                                                        | Default                     | Required |
+|---------------------------|------------------------------------------------------------------------------------|-----------------------------|----------|
+| PORT                      | Server port                                                                       | 3000                        | No       |
+| BASE_URL                  | Base URL for the application                                                      | http://localhost:PORT       | Yes      |
+| DUMBPAD_PIN               | PIN protection (4-10 digits)                                                      | None                        | No       |
+| SITE_TITLE                | Site title displayed in header                                                    | DumbPad                     | No       |
+| NODE_ENV                  | Node environment mode (development or production)                                 | production                  | No       |
+| ALLOWED_ORIGINS           | Allowed CORS origins (`*` for all or comma-separated list)                        | *                           | No       |
+| LOCKOUT_TIME              | Lockout time after max PIN attempts (in minutes)                                  | 15                          | No       |
+| MAX_ATTEMPTS              | Maximum PIN entry attempts before lockout                                         | 5                           | No       |
+| COOKIE_MAX_AGE            | Maximum age of authentication cookies (in hours)                                  | 24                          | No       |
+| PAGE_HISTORY_COOKIE_AGE   | Age of cookie storing last opened notepad (in days, max 400)                      | 365                         | No       |
 
 ## Security
 
@@ -165,6 +168,7 @@ docker run -p 3000:3000 -v "${PWD}\data:/app/data" dumbwareio/dumbpad:latest
 * No client-side PIN storage
 * Rate limiting
 * Collaborative editing
+* CORS support for origin restrictions (optional)
 
 ## Technical Details
 
@@ -187,7 +191,6 @@ docker run -p 3000:3000 -v "${PWD}\data:/app/data" dumbwareio/dumbpad:latest
 * marked: Markdown formatting
 * fuse.js: Fuzzy searching
 
-
 The `data` directory contains:
 - `notepads.json`: List of all notepads
 - Individual `.txt` files for each notepad's content
@@ -204,7 +207,7 @@ The `data` directory contains:
 - Create multiple notepads with the + button.
 - Download notepads as .txt or .md files.
 - Hover over notepad controls to view tooltips of keyboard shortcuts
-- Press `Ctrl+K` (or `Cmd+S`) to open fuzzy search
+- Press `Ctrl+K` (or `Cmd+K`) to open fuzzy search
 - If PIN protection is enabled, you'll need to enter the PIN to access the app.
 
 ## Technical Details

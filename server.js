@@ -8,12 +8,14 @@ const cookieParser = require('cookie-parser');
 const WebSocket = require('ws');
 const Fuse = require('fuse.js');
 const { generatePWAManifest } = require("./scripts/pwa-manifest-generator")
+const { originValidationMiddleware, getCorsOptions, validateOrigin } = require('./scripts/cors');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const NODE_ENV = process.env.NODE_ENV || 'development'
 const DATA_DIR = path.join(__dirname, 'data');
 const PUBLIC_DIR = path.join(__dirname, "public");
+const ASSETS_DIR = path.join(PUBLIC_DIR, "assets");
 const NOTEPADS_FILE = path.join(DATA_DIR, 'notepads.json');
 const SITE_TITLE = process.env.SITE_TITLE || 'DumbPad';
 const PIN = process.env.DUMBPAD_PIN;
@@ -38,83 +40,8 @@ const server = app.listen(PORT, () => {
 // Trust proxy - required for secure cookies behind a reverse proxy
 app.set('trust proxy', 1);
 
-// CORS Setup
-function setupOrigins() {
-    const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS;
-    let allowedOrigins = [ BASE_URL ];
-    if (NODE_ENV === 'development' || ALLOWED_ORIGINS === '*') {
-        allowedOrigins = '*';
-    }
-    else if (ALLOWED_ORIGINS && typeof ALLOWED_ORIGINS === 'string') {
-        try {
-            const allowed = ALLOWED_ORIGINS.split(',').map(origin => origin.trim());
-            allowed.forEach(origin => {
-                const normalizedOrigin = normalizeOrigin(origin);
-                if (normalizedOrigin !== BASE_URL) allowedOrigins.push(normalizedOrigin);
-            });
-        }
-        catch (error) {
-            console.error(`Error setting up ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}:`, error);
-        }
-    }
-    console.log("ALLOWED ORIGINS:", allowedOrigins);
-    return allowedOrigins;
-}
-
-function normalizeOrigin(origin) {
-    if (origin) {
-        try {
-            console.log("Validating Origin:", origin);
-            const normalizedOrigin = new URL(origin).origin;
-            console.log("Normalized Url:", normalizedOrigin);
-            return normalizedOrigin;
-        } catch (error) {
-            console.error("Error parsing referer URL:", error);
-            throw new Error("Error parsing referer URL:", error);
-        }
-    }
-}
-
-function validateOrigin(origin) {
-    if (NODE_ENV === 'development' || allowedOrigins === '*') return true;
-
-    try {
-        if (origin) origin = normalizeOrigin(origin);
-        else {
-            console.warn("No origin to validate.");
-            return false;
-        }
-
-        if (origin === BASE_URL || allowedOrigins.includes(origin)) return true; 
-        else {
-            console.warn("Blocked request from origin:", { origin });
-            return false;
-        }
-    }
-    catch (error) {
-        console.error(error);
-    }
-}
-
-function originValidationMiddleware(req, res, next) {
-    let origin = req.headers.referer;
-    const isOriginValid = validateOrigin(origin);
-
-    if (isOriginValid) {
-        next();
-    } else {
-        console.warn("Blocked request from origin:", { origin });
-        res.status(403).json({ error: 'Forbidden' });
-    }
-}
-
-const allowedOrigins = setupOrigins();
-const corsOptions = {
-    origin: allowedOrigins,
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-};
+// CORS setup
+const corsOptions = getCorsOptions(BASE_URL);
 
 // Middleware setup
 app.use(cors(corsOptions));
@@ -124,9 +51,6 @@ app.use(cookieParser());
 app.use('/js/marked', express.static(
     path.join(__dirname, 'node_modules/marked/lib')
 ));
-
-// Apply origin validation to all /api routes
-app.use('/api', originValidationMiddleware);
 
 generatePWAManifest(SITE_TITLE);
 
@@ -346,8 +270,8 @@ function secureCompare(a, b) {
     }
 }
 
-// Main app route with PIN check
-app.get('/', (req, res) => {
+// Main app route with PIN & CORS check
+app.get('/', originValidationMiddleware, (req, res) => {
     const pin = process.env.DUMBPAD_PIN;
     
     // Skip PIN if not configured
@@ -367,10 +291,10 @@ app.get('/', (req, res) => {
 // Serve the pwa/asset manifest
 app.get("/asset-manifest.json", (req, res) => {
     // generated in pwa-manifest-generator and fetched from service-worker.js
-    res.sendFile(path.join(PUBLIC_DIR, "asset-manifest.json"));
+    res.sendFile(path.join(ASSETS_DIR, "asset-manifest.json"));
   });
 app.get("/manifest.json", (req, res) => {
-    res.sendFile(path.join(PUBLIC_DIR, "manifest.json"));
+    res.sendFile(path.join(ASSETS_DIR, "manifest.json"));
   });
 
 // Login page route
@@ -451,7 +375,7 @@ app.get('/api/pin-required', (req, res) => {
 app.get('/api/config', (req, res) => {
     res.json({
         siteTitle: SITE_TITLE,
-        baseUrl: process.env.BASE_URL
+        baseUrl: process.env.BASE_URL,
     });
 });
 

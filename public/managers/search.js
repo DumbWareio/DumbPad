@@ -1,9 +1,10 @@
 
 
 export default class SearchManager {
-  constructor(fetchWithPin, selectNotepad) {
+  constructor(fetchWithPin, selectNotepad, closeModals) {
     this.fetchWithPin = fetchWithPin;
     this.selectNotepad = selectNotepad;
+    this.closeModals = closeModals;
     this.cache = {};
     this.page = 1;
     this.query = "";
@@ -95,6 +96,7 @@ export default class SearchManager {
   }
 
   openModal() {
+    this.closeModals(); // close any open modals
     this.clearResults();
     this.openSearchBtn.classList.add('active');
     this.searchModal.classList.remove('hidden');
