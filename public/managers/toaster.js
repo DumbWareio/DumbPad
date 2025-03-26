@@ -6,7 +6,7 @@ export class ToastManager {
   }
 
   show(message, type = 'success', isStatic = false, timeoutMs = 1000) {
-    if (timeoutMs < 1) return;
+    if (!timeoutMs || timeoutMs < 1) return;
 
     const toast = document.createElement('div');
     toast.classList.add('toast');

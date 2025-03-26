@@ -43,10 +43,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const settingsCancel = document.getElementById('settings-cancel');
     const settingsSave = document.getElementById('settings-save');
     const settingsReset = document.getElementById('settings-reset');
-    const settingsAutoSaveStatusInterval = document.getElementById('autosave-status-interval-input');
+    const settingsInputAutoSaveStatusInterval = document.getElementById('autosave-status-interval-input');
     let currentTheme =  storageManager.load(THEME_KEY);
-    const defaultToastMessageTimeout = 1000;
-    let saveStatusMessageInterval = defaultToastMessageTimeout;
+    const appSettings = { // Add additional settings here:
+        saveStatusMessageInterval: 1000,
+    };
 
     // Theme handling
     const initializeTheme = () => {
@@ -400,7 +401,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // Save notes with debounce
-    const saveNotes = async (content) => {
+    const saveNotes = async (content, isAutoSave) => {
         try {
             await fetchWithPin(`/api/notes/${currentNotepadId}`, {
                 method: 'POST',
@@ -419,6 +420,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             lastSaveTime = Date.now();
+
+            if (isAutoSave) toaster.show('Saved', 'success', false, appSettings.saveStatusMessageInterval); // Bypassed if interval is 0 or null
+            else toaster.show('Saved');
         } catch (err) {
             console.error('Error saving notes:', err);
             toaster.show('Error saving', 'error', false, 3000);
@@ -429,8 +433,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const checkPeriodicSave = (content) => {
         const now = Date.now();
         if (now - lastSaveTime >= SAVE_INTERVAL) {
-            saveNotes(content);
-            toaster.show('Saved', 'success', false, saveStatusMessageInterval);
+            saveNotes(content, true);
         }
     };
 
@@ -438,8 +441,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const debouncedSave = (content) => {
         clearTimeout(saveTimeout);
         saveTimeout = setTimeout(async () => {
-            await saveNotes(content);
-            toaster.show('Saved', 'success', false, saveStatusMessageInterval); // Bypassed if interval is 0
+            await saveNotes(content, true);
         }, 300);
     };
 
@@ -604,26 +606,6 @@ document.addEventListener('DOMContentLoaded', () => {
         await selectNotepad(notepadSelector[newIndex].value);
     }
 
-    const loadSettings = () => {
-        const currentSettings = settingsManager.getSettings();
-        if (currentSettings) {
-            saveStatusMessageInterval = currentSettings.saveStatusMessageInterval;
-            settingsAutoSaveStatusInterval.value = currentSettings.saveStatusMessageInterval;
-        }
-        return currentSettings;
-    }
-
-    const initializeDefaultSettings = (reset) => {
-        const currentSettings = loadSettings();
-        if (reset || !currentSettings) {
-            saveStatusMessageInterval = defaultToastMessageTimeout;
-            const defaultSettings = { 
-                saveStatusMessageInterval,
-            };
-            settingsManager.saveSettings(defaultSettings);
-        } 
-    }
-
     const hideModal = (modal, toastMessage) => {
         modal.classList.remove('visible');
         if (toastMessage) toaster.show(toastMessage);
@@ -712,35 +694,24 @@ document.addEventListener('DOMContentLoaded', () => {
         previewMarkdownBtn.addEventListener('click', toggleMarkdownPreview);
 
         settingsButton.addEventListener('click', () => {
-            loadSettings();
-            showModal(settingsModal, settingsAutoSaveStatusInterval);
+            settingsManager.loadSettings(appSettings);
+            showModal(settingsModal, settingsInputAutoSaveStatusInterval);
         });
         settingsCancel.addEventListener('click', () => {
             hideModal(settingsModal);
         });
         settingsReset.addEventListener('click', () => {
-            initializeDefaultSettings(true);
+            settingsManager.loadSettings(appSettings, true); // true resets to default
             hideModal(settingsModal, 'Settings reset');
         });
         settingsSave.addEventListener('click', () => {
-            saveStatusMessageInterval = parseInt(settingsAutoSaveStatusInterval.value);
-            const settingsToSave = { 
-                saveStatusMessageInterval,
-            };
-            settingsManager.saveSettings(settingsToSave);
+            settingsManager.saveSettings(appSettings);
             hideModal(settingsModal, 'Settings Saved');
         });
-        settingsAutoSaveStatusInterval.addEventListener('keyup', (e) => {
+        settingsInputAutoSaveStatusInterval.addEventListener('keyup', (e) => {
             if (e.key === 'Enter') {
-                const newInterval = parseInt(settingsAutoSaveStatusInterval.value.trim());
-                if (newInterval > -1) {
-                    saveStatusMessageInterval = newInterval;
-                    const settingsToSave = { 
-                        saveStatusMessageInterval,
-                    };
-                    settingsManager.saveSettings(settingsToSave);
-                    hideModal(settingsModal, 'Settings Saved');
-                }
+                settingsManager.saveSettings(appSettings);
+                hideModal(settingsModal, 'Settings Saved');
             }
         })
     }
@@ -807,7 +778,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     case 's': {
                         e.preventDefault();
                         await saveNotes(editor.value);
-                        toaster.show('Saved');
                         break;
                     }
                     case 'p': {
@@ -916,7 +886,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         
         initializeTheme();
-        initializeDefaultSettings();
+        settingsManager.loadSettings(appSettings);
 
         addEventListeners();
         setupToolTips();
