@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,8 +9,12 @@
     <link rel="apple-touch-icon" href="Assets/dumbpad.png">
     <link rel="stylesheet" href="Assets/styles.css">
     <script>
-        (function() { // Prevent theme flicker by setting theme immediately
-            const theme = localStorage.getItem('dumbpad_theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        (function() { // Initialize theme immediately - Prevents theme flicker
+            let theme = JSON.parse(localStorage.getItem('dumbpad_theme')) 
+            if (!theme) {
+                theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                localStorage.setItem('dumbpad_theme', JSON.stringify(theme));
+            } 
             document.documentElement.setAttribute('data-theme', theme);
         })();
     </script>
@@ -49,6 +53,7 @@
             const pinContainer = document.getElementById('pin-container');
             const pinError = document.getElementById('pin-error');
             const themeToggle = document.getElementById('theme-toggle');
+            let currentTheme = JSON.parse(localStorage.getItem('dumbpad_theme'));
             let pinDigits = [];
             let pinLength = 4;
 
@@ -227,23 +232,13 @@
                 }
             };
 
-            // Initialize theme
-            const initializeTheme = () => {
-                if (localStorage.getItem('theme') === 'dark' || 
-                    (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-                    document.body.classList.remove('light-mode');
-                    document.body.classList.add('dark-mode');
-                }
-            };
-
             // Theme toggle handler
             const toggleTheme = () => {
-                document.body.classList.toggle('dark-mode');
-                document.body.classList.toggle('light-mode');
-                localStorage.setItem('theme', document.body.classList.contains('dark-mode') ? 'dark' : 'light');
+                currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
+                document.documentElement.setAttribute('data-theme', currentTheme);
+                localStorage.setItem('dumbpad_theme', JSON.stringify(currentTheme));
             };
 
-            initializeTheme();
             themeToggle.addEventListener('click', toggleTheme);
             initialize(); // Start initialization
         });
