@@ -10,8 +10,12 @@
     <link rel="stylesheet" href="Assets/styles.css">
     <link rel="manifest" href="Assets/manifest.json">
     <script>
-        (function() { // Prevent theme flicker by setting theme immediately
-            const theme = JSON.parse(localStorage.getItem('dumbpad_theme')) || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        (function() { // Initialize theme immediately - Prevents theme flicker
+            let theme = JSON.parse(localStorage.getItem('dumbpad_theme')) 
+            if (!theme) {
+                theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                localStorage.setItem('dumbpad_theme', JSON.stringify(theme));
+            } 
             document.documentElement.setAttribute('data-theme', theme);
         })();
     </script>
@@ -21,7 +25,7 @@
         <header>
             <div class="header-top">
                 <div id="header-title">
-                    <h1>DumbPad</h1>
+                    <h1 style="font-size: 1.5rem;">DumbPad</h1>
                 </div>
                 <div class="header-right"> 
                     <button id="search-open" class="icon-button" data-tooltip="Search ({shortcut})" data-shortcuts='{"win": "ctrl+k", "mac": "cmd+k"}'>

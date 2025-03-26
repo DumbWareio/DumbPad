@@ -49,16 +49,6 @@ document.addEventListener('DOMContentLoaded', () => {
         saveStatusMessageInterval: 1000,
     };
 
-    // Theme handling
-    const initializeTheme = () => {
-        if (!currentTheme) {
-            currentTheme = (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-            storageManager.save(THEME_KEY, currentTheme);
-        }
-        themeToggle.innerHTML = currentTheme === 'dark' ? '<span class="sun">☀</span>' : '<span class="moon">☽</span>';
-        // document.documentElement.setAttribute('data-theme', currentTheme); // Handled in index.html
-    }
-
     const addThemeEventListeners = () => {
         // Theme toggle handler
         themeToggle.addEventListener('click', () => {
@@ -885,7 +875,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 toaster.show(err, "error", true);
             });
         
-        initializeTheme();
         settingsManager.loadSettings(appSettings);
 
         addEventListeners();
