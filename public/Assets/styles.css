@@ -626,6 +626,51 @@ code {
     font-weight: bold;
 }
 
+.settings-form {
+    margin-bottom: 1.5rem;
+}
+
+.checkbox-label {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+.checkbox-label input {
+    margin-top: 0.5rem;
+}
+
+input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 40px;
+    height: 20px;
+    background-color: #ccc;
+    border-radius: 10px;
+    position: relative;
+    cursor: pointer;
+    transition: background-color 0.3s;
+  }
+  
+  input[type="checkbox"]:after {
+    content: "";
+    position: absolute;
+    left: 2px;
+    top: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background-color: white;
+    transition: transform 0.3s;
+  }
+  
+  input[type="checkbox"]:checked {
+    background-color: var(--primary-color);
+  }
+  
+  input[type="checkbox"]:checked:after {
+    transform: translateX(20px);
+  }
+
 @media(max-width: 1400px) {
     #header-title {
         font-size: 1.2rem;
