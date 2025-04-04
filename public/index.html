@@ -163,8 +163,16 @@
         <div id="settings-modal" class="modal">
             <div class="modal-content">
                 <h2>Settings</h2>
-                <label class="modal-message">Status Message Timing (ms) - Autosave:</label>
-                <input id="autosave-status-interval-input" class="modal-input" type="number" min="0" value="0" placeholder="Leave empty or 0 to disable messages"/>
+                <div class="settings-form">
+                    <label class="modal-message">
+                        Status Message Timing (ms) - Autosave:
+                        <input id="autosave-status-interval-input" class="modal-input" type="number" min="0" value="0" placeholder="Leave empty or 0 to disable messages" />
+                    </label>
+                    <label class="checkbox-label">
+                        Enable Remote Connection Messages:
+                        <input type="checkbox" id="settings-remote-connection-messages" />
+                    </label>
+                </div>
                 <div class="modal-buttons">
                     <button id="settings-cancel">Cancel</button>
                     <button id="settings-reset" class="danger">Reset</button>

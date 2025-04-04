@@ -91,6 +91,20 @@ wss.on('connection', (ws) => {
                 userId = data.userId;
                 clients.set(userId, ws);
                 console.log('User connected:', userId);
+                
+                if (clients.size > 1) {
+                    console.log('Notifying other clients about new user:', userId);
+                    clients.forEach((client, clientId) => {
+                        if (client.readyState === WebSocket.OPEN) { 
+                            client.send(JSON.stringify({
+                                type: 'user_connected',
+                                userId: userId,
+                                notepadId: data.notepadId,
+                                count: clients.size
+                            }));
+                        }
+                    })
+                }
             }
 
             // Handle different message types
@@ -199,7 +213,8 @@ wss.on('connection', (ws) => {
                 if (client.readyState === WebSocket.OPEN) {
                     client.send(JSON.stringify({
                         type: 'user_disconnected',
-                        userId: userId
+                        userId: userId,
+                        count: clients.size
                     }));
                 }
             });

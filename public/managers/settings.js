@@ -3,11 +3,20 @@ export default class SettingsManager {
     this.storageManager = storageManager;
     this.SETTINGS_KEY = 'dumbpad_settings';
     this.settingsInputAutoSaveStatusInterval = document.getElementById('autosave-status-interval-input');
+    this.settingsEnableRemoteConnectionMessages = document.getElementById('settings-remote-connection-messages');
   }
   
+  defaultSettings() {
+    return { // Add additional default settings in here:
+      saveStatusMessageInterval: 500,
+      enableRemoteConnectionMessages: false,
+    }
+  }
+
   getSettings() {
     try {
-      const currentSettings = this.storageManager.load(this.SETTINGS_KEY);
+      let currentSettings = this.storageManager.load(this.SETTINGS_KEY);
+      if (!currentSettings) currentSettings = this.defaultSettings();
       // console.log("Current Settings:", currentSettings);
       return currentSettings;
     } catch (err) {
@@ -16,32 +25,32 @@ export default class SettingsManager {
     }
   }
 
-  saveSettings(appSettings, reset) {
+  saveSettings(reset) {
     try {
-      const settingsToSave = reset ? appSettings : this.getInputValues(appSettings);
+      const settingsToSave = reset ? this.defaultSettings() : this.getInputValues();
       this.storageManager.save(this.SETTINGS_KEY, settingsToSave);
       // console.log("Saved new settings:", newSettings);
+      return settingsToSave;
     }
     catch (err) {
       console.error(err);
     }
   }
 
-  loadSettings(appSettings, reset) {
+  loadSettings(reset) {
     try {
+      const appSettings = this.defaultSettings();
       let currentSettings = this.getSettings();
   
-      if (reset || !currentSettings) { // Set to default settings
-        // Add default settings for additional settings below:
-        appSettings.saveStatusMessageInterval = 1000;
-  
-        currentSettings = appSettings;
-        this.saveSettings(currentSettings, true);
-      }
+      // saves default values to local storage
+      if (reset || !currentSettings) currentSettings = this.saveSettings(true);
   
       // initialize/update values and inputs in app.js below:
       appSettings.saveStatusMessageInterval = currentSettings.saveStatusMessageInterval;
       this.settingsInputAutoSaveStatusInterval.value = currentSettings.saveStatusMessageInterval;
+
+      appSettings.enableRemoteConnectionMessages = currentSettings.enableRemoteConnectionMessages;
+      this.settingsEnableRemoteConnectionMessages.checked = currentSettings.enableRemoteConnectionMessages;
       
       return currentSettings;
     }
@@ -50,11 +59,15 @@ export default class SettingsManager {
     }
   }
 
-  getInputValues(appSettings) {
+  getInputValues() {
+    const appSettings = this.defaultSettings();
+
     // Get and set values from inputs to appSettings
     let newInterval = parseInt(this.settingsInputAutoSaveStatusInterval.value.trim());
-    if (isNaN(newInterval) || newInterval < 0) newInterval = null;
+    if (isNaN(newInterval) || newInterval <= 0) newInterval = null;
     appSettings.saveStatusMessageInterval = newInterval;
+
+    appSettings.enableRemoteConnectionMessages = this.settingsEnableRemoteConnectionMessages.checked;
 
     return appSettings;
   }

@@ -1,7 +1,10 @@
 import { marked } from '/js/marked/marked.esm.js';
 
 export class CollaborationManager {
-    constructor({ userId, userColor, currentNotepadId, operationsManager, editor, onNotepadChange, onUserDisconnect, onCursorUpdate }) {
+    constructor({ userId, userColor, currentNotepadId, operationsManager, editor, onNotepadChange, onUserDisconnect, onCursorUpdate,
+            settingsManager, toaster, confirmationManager, saveNotes, renameNotepad
+        })
+    {
         this.userId = userId;
         this.userColor = userColor;
         this.currentNotepadId = currentNotepadId;
@@ -11,7 +14,13 @@ export class CollaborationManager {
         this.onUserDisconnect = onUserDisconnect;
         this.onCursorUpdate = onCursorUpdate;
         this.previewPane = document.getElementById('preview-pane');
-        
+        this.settingsManager = settingsManager;
+        this.toaster = toaster;
+        this.wsCount = 1;
+        this.confirmationManager = confirmationManager;
+        this.saveNotes = saveNotes;
+        this.renameNotepad = renameNotepad;
+
         this.ws = null;
         this.isReceivingUpdate = false;
         this.lastCursorUpdate = 0;
@@ -20,6 +29,11 @@ export class CollaborationManager {
         
         // For cursor update debouncing
         this.cursorUpdateTimeout = null;
+
+        // Websocket message queue to send messages when the connection is not open
+        this.messageQueue = [];
+        this.messageQueueTimer = null;
+        this.debounceDelay = 200; // 200ms debounce delay
     }
 
     // Initialize WebSocket connection
@@ -43,6 +57,7 @@ export class CollaborationManager {
             if (this.DEBUG) {
                 console.log('WebSocket connection closed');
             }
+            clearTimeout(this.messageQueueTimer);
             setTimeout(() => this.setupWebSocket(), 5000);
         };
         
@@ -51,10 +66,15 @@ export class CollaborationManager {
                 console.log('WebSocket connection established');
             }
             this.updateLocalCursor();
+
+            // Send any queued messages
+            this.debounceSendQueue();
         };
         
         this.ws.onerror = (error) => {
             console.error('WebSocket error:', error);
+            clearTimeout(this.messageQueueTimer);
+            this.toaster.show(`Websocket connection error: ${error}`, 'error');
         };
     }
 
@@ -64,6 +84,13 @@ export class CollaborationManager {
             const data = JSON.parse(event.data);
             if (this.DEBUG) {
                 console.log('Received WebSocket message:', data);
+            }
+
+            if (data.type === 'user_connected') {
+                if (data.count > 1) {
+                    this.toastRemoteConnection(true, data);
+                    this.wsCount = data.count;
+                }
             }
             
             if (data.type === 'cursor' && data.notepadId === this.currentNotepadId) {
@@ -82,8 +109,19 @@ export class CollaborationManager {
             else if (data.type === 'notepad_change') {
                 this.onNotepadChange();
             }
+            else if (data.type === 'notepad_delete') {
+                // notify other users on the same notepad of the deletion
+                this.handleConfirmDeleteNotepad(data);
+            }
+            else if (data.type === 'notify_delete_revert') {
+                const message = `${data.notepadName} delete has been reverted by a remote user`;
+                this.toaster.show(message, 'error', false, 5000);
+                this.onNotepadChange();
+            }
             else if (data.type === 'user_disconnected') {
                 this.onUserDisconnect(data.userId);
+                this.toastRemoteConnection(false, data);
+                this.wsCount = data.count;
             }
         } catch (error) {
             console.error('WebSocket message error:', error);
@@ -258,5 +296,81 @@ export class CollaborationManager {
             // If we can't find the option, refresh the entire list
             this.onNotepadChange();
         }
+    }
+
+    async handleConfirmDeleteNotepad(data) {
+        if (data.notepadId && data.notepadId === this.currentNotepadId) {
+            const message = `${data.notepadName} has been deleted by a remote user.\n\nConfirm to accept or cancel to reject.`;
+            const confirmed = await this.confirmationManager.show(
+                message,
+                [ // onConfirm
+                    this.onNotepadChange, 
+                    () => this.toaster.show(`${data.notepadName} deleted`)
+                ],
+                [ // onCancel
+                    () => this.saveNotes(this.editor.value, true, false),
+                    this.onNotepadChange,
+                    () => this.renameNotepad(data.notepadName, false),
+                    this.onNotepadChange,
+                    () => this.toaster.show('Notepad delete reverted'),
+                ]);
+            
+            if (!confirmed) {
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    try {
+                        this.ws.send(JSON.stringify({
+                            type: 'notify_delete_revert',
+                            notepadId: data.notepadId,
+                            notepadName: data.notepadName,
+                            userId: this.userId
+                        }));
+                    } catch (error) {
+                        console.error('Error sending WebSocket message:', error);
+                    }
+                }
+                else { 
+                    // queue message to notify remote users of the delete revert
+                    // called in this.ws.onopen
+                    this.messageQueue.push({
+                        type: 'notify_delete_revert',
+                        notepadId: data.notepadId,
+                        notepadName: data.notepadName,
+                        userId: this.userId
+                    });
+                }
+            }
+        } 
+        else this.onNotepadChange();
+    }
+
+    toastRemoteConnection(isConnect, data) {
+        const appSettings = this.settingsManager.getSettings();
+        if (appSettings.enableRemoteConnectionMessages) { 
+            let message = isConnect ? 'Remote User Connected' : 'Remote User Disconnected';
+            if (data.count > 1) message += ` - (${data.count} Online)`;
+            this.toaster.show(message);
+        }
+    }
+
+    debounceSendQueue() {        
+        clearTimeout(this.messageQueueTimer);
+        this.messageQueueTimer = setTimeout(() => {
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                while (this.messageQueue.length > 0) {
+                    const message = this.messageQueue.shift();
+                    try {
+                        this.ws.send(JSON.stringify(message));
+                    } catch(error) {
+                        console.error("error sending queued message", error);
+                    }
+                }
+            } else {
+                console.error('WebSocket connection is not open.');
+            }
+        }, this.debounceDelay);
+    }
+
+    getWSCount() {
+        return this.wsCount;
     }
 } 
