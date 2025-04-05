@@ -5,14 +5,14 @@ import { ToastManager } from './managers/toaster.js';
 import SearchManager from './managers/search.js';
 import StorageManager from './managers/storage.js';
 import SettingsManager from './managers/settings.js'
+import ConfirmationManager from './managers/confirmation.js';
 import { marked } from '/js/marked/marked.esm.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     const DEBUG = false;
     let isPreviewMode = false;
     const THEME_KEY = 'dumbpad_theme';
-    const storageManager = new StorageManager();
-    const settingsManager = new SettingsManager(storageManager);
+    let appSettings = {};
     const editorContainer = document.getElementById('editor-container');
     const editor = document.getElementById('editor');
     const previewContainer = document.getElementById('preview-container');
@@ -44,83 +44,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const settingsSave = document.getElementById('settings-save');
     const settingsReset = document.getElementById('settings-reset');
     const settingsInputAutoSaveStatusInterval = document.getElementById('autosave-status-interval-input');
-    let currentTheme =  storageManager.load(THEME_KEY);
-    const appSettings = { // Add additional settings here:
-        saveStatusMessageInterval: 1000,
-    };
+    const settingsEnableRemoteConnectionMessages = document.getElementById('settings-remote-connection-messages');
 
-    const addThemeEventListeners = () => {
-        // Theme toggle handler
-        themeToggle.addEventListener('click', () => {
-            currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
-            document.documentElement.setAttribute('data-theme', currentTheme);
-            themeToggle.innerHTML = currentTheme === 'dark' ? '<span class="sun">☀</span>' : '<span class="moon">☽</span>';
-            inheritEditorStyles(previewPane);
-            storageManager.save(THEME_KEY, currentTheme);
-        });
-    }
-    
     let saveTimeout;
     let lastSaveTime = Date.now();
     const SAVE_INTERVAL = 2000;
     let currentNotepadId = 'default';
     let previousEditorValue = editor.value;
 
-    // Add credentials to all API requests
-    const fetchWithPin = async (url, options = {}) => {
-        options.credentials = 'same-origin';
-        try {
-            return fetch(url, options); 
-        } 
-        catch (error) {
-            console.log(error);
-            toaster.show(error, "error", true);
-        }
-    };
-
-    // Load notepads list
-    const loadNotepads = async () => {
-        try {
-            const response = await fetchWithPin('/api/notepads');
-            const data = await response.json();
-
-            currentNotepadId = data['note_history'];
-            if (collaborationManager) {
-                collaborationManager.currentNotepadId = currentNotepadId;
-            }
-            
-            notepadSelector.innerHTML = data.notepads_list
-                .map(pad => `<option value="${pad.id}"${pad.id === currentNotepadId?'selected':''}>${pad.name}</option>`)
-                .join('');
-        } catch (err) {
-            console.error('Error loading notepads:', err);
-            return [];
-        }
-    };
-
-    // Load notes
-    const loadNotes = async (notepadId) => {
-        try {
-            const response = await fetchWithPin(`/api/notes/${notepadId}`);
-            const data = await response.json();
-            previousEditorValue = data.content;
-            editor.value = data.content;
-            
-            if (isPreviewMode) {
-                // Update preview if in preview mode
-                previewPane.innerHTML = marked.parse(data.content);
-            }
-        } catch (err) {
-            console.error('Error loading notes:', err);
-        }
-    };
-
     // Initialize managers
     const operationsManager = new OperationsManager();
     operationsManager.DEBUG = DEBUG;
-
     const cursorManager = new CursorManager({ editor });
     cursorManager.DEBUG = DEBUG;
+    const storageManager = new StorageManager();
+    let currentTheme =  storageManager.load(THEME_KEY);
+    const settingsManager = new SettingsManager(storageManager);
+    const confirmationManager = new ConfirmationManager();
 
     // Generate user ID and color
     const userId = Math.random().toString(36).substring(2, 15);
@@ -129,7 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let collaborationManager = null;
     
-    // Initialize the collaboration manager after other functions are defined
+    // Initialize the collaboration manager
     collaborationManager = new CollaborationManager({
         userId,
         userColor,
@@ -138,9 +78,15 @@ document.addEventListener('DOMContentLoaded', () => {
         editor,
         onNotepadChange: loadNotepads,
         onUserDisconnect: (disconnectedUserId) => cursorManager.handleUserDisconnection(disconnectedUserId),
-        onCursorUpdate: (remoteUserId, position, color) => cursorManager.updateCursorPosition(remoteUserId, position, color)
+        onCursorUpdate: (remoteUserId, position, color) => cursorManager.updateCursorPosition(remoteUserId, position, color),
+        settingsManager,
+        toaster,
+        confirmationManager,
+        saveNotes,
+        renameNotepad
     });
     collaborationManager.DEBUG = DEBUG;
+    collaborationManager.setupWebSocket(); // Initialize WebSocket connection immediately
 
     // Generate a deterministic color for the user based on their ID
     function getRandomColor(userId) {
@@ -169,6 +115,57 @@ document.addEventListener('DOMContentLoaded', () => {
         
         return colors[index];
     }
+    
+    // Add credentials to all API requests
+    const fetchWithPin = async (url, options = {}) => {
+        options.credentials = 'same-origin';
+        try {
+            return fetch(url, options); 
+        } 
+        catch (error) {
+            console.log(error);
+            toaster.show(error, "error", true);
+        }
+    };
+
+    // Load notepads list
+    async function loadNotepads() {
+        try {
+            const response = await fetchWithPin('/api/notepads');
+            const data = await response.json();
+
+            currentNotepadId = data['note_history'];
+            if (collaborationManager) {
+                const currentNotepadExists = data.notepads_list.some(np => np.id === currentNotepadId);
+                if (currentNotepadExists) await selectNotepad(currentNotepadId);
+                else currentNotepadId = await selectNextNotepad(false);
+            }
+            
+            notepadSelector.innerHTML = data.notepads_list
+                .map(pad => `<option value="${pad.id}"${pad.id === currentNotepadId ? 'selected' : ''}>${pad.name}</option>`)
+                .join('');
+        } catch (err) {
+            console.error('Error loading notepads:', err);
+            return [];
+        }
+    };
+
+    // Load notes
+    async function loadNotes(notepadId) {
+        try {
+            const response = await fetchWithPin(`/api/notes/${notepadId}`);
+            const data = await response.json();
+            previousEditorValue = data.content;
+            editor.value = data.content;
+            
+            if (isPreviewMode) {
+                // Update preview if in preview mode
+                previewPane.innerHTML = marked.parse(data.content);
+            }
+        } catch (err) {
+            console.error('Error loading notes:', err);
+        }
+    };
 
     const addEditorEventListeners = () => {
         // Track cursor position and selection
@@ -362,7 +359,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // Rename notepad
-    const renameNotepad = async (newName) => {
+    async function renameNotepad(newName, showStatus = true) {
         try {
             await fetchWithPin(`/api/notepads/${currentNotepadId}`, {
                 method: 'PUT',
@@ -383,7 +380,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }));
             }
 
-            toaster.show('Renamed notepad')
+            if (showStatus) toaster.show('Renamed notepad')
         } catch (err) {
             console.error('Error renaming notepad:', err);
             toaster.show('Error renaming notepad', 'error', true);
@@ -391,7 +388,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // Save notes with debounce
-    const saveNotes = async (content, isAutoSave) => {
+    async function saveNotes(content, isAutoSave, showStatus = true) {
         try {
             await fetchWithPin(`/api/notes/${currentNotepadId}`, {
                 method: 'POST',
@@ -411,8 +408,13 @@ document.addEventListener('DOMContentLoaded', () => {
             
             lastSaveTime = Date.now();
 
-            if (isAutoSave) toaster.show('Saved', 'success', false, appSettings.saveStatusMessageInterval); // Bypassed if interval is 0 or null
-            else toaster.show('Saved');
+            if (showStatus) {
+                if (isAutoSave) {
+                    appSettings = settingsManager.getSettings();
+                    toaster.show('Saved', 'success', false, appSettings.saveStatusMessageInterval); // Bypassed if interval is 0 or null
+                }
+                else toaster.show('Saved');
+            }
         } catch (err) {
             console.error('Error saving notes:', err);
             toaster.show('Error saving', 'error', false, 3000);
@@ -442,6 +444,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 toaster.show('Cannot delete the default notepad', 'error');
                 return;
             }
+            const currentNotepadName = notepadSelector.options[notepadSelector.selectedIndex].textContent;
             
             const response = await fetchWithPin(`/api/notepads/${currentNotepadId}`, {
                 method: 'DELETE',
@@ -454,17 +457,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 const errorData = await response.json();
                 throw new Error(errorData.error || 'Failed to delete notepad');
             }
-
-            // select previous notepad
-            await selectNextNotepad(false);
-
-            await loadNotepads();
             
             if (collaborationManager.ws && collaborationManager.ws.readyState === WebSocket.OPEN) {
                 collaborationManager.ws.send(JSON.stringify({
-                    type: 'notepad_change'
+                    type: 'notepad_delete',
+                    notepadId: currentNotepadId,
+                    notepadName: currentNotepadName
                 }));
             }
+
+            await loadNotepads();
             
             // Hide Delete Modal
             deleteModal.classList.remove('visible');
@@ -560,11 +562,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Update the selectedIndex if found
-        if (newIndex !== -1) return notepadSelector.selectedIndex = newIndex;
-        else {
-            console.warn(`Notepad with id '${id}' not found in selector.`);
-            return -1;
-        }
+        newIndex <= 0 ? 0 : newIndex;
+        notepadSelector.selectedIndex = newIndex;
+        return newIndex;
     }
 
     /* IMPORTANT
@@ -593,7 +593,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const selectNextNotepad = async (forward = true) => {
         const newIndex = getNextNotepadIndex(forward);
-        await selectNotepad(notepadSelector[newIndex].value);
+        const notepadId = notepadSelector[newIndex].value;
+        await selectNotepad(notepadId);
+        return notepadId;
     }
 
     const hideModal = (modal, toastMessage) => {
@@ -652,6 +654,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 toaster.show('Cannot delete the default notepad', 'error');
                 return;
             }
+
+            document.querySelectorAll('.modal-ws-count').forEach(m => m.remove());
+            if (collaborationManager.getWSCount() > 1) {
+                const modalMessage = deleteModal.querySelector('.modal-message');
+                const prependMessage = document.createElement('p');
+                prependMessage.classList.add('modal-ws-count', 'modal-message');
+                prependMessage.innerHTML = '<br/><strong>One or more Collaborators are connected<strong><br/>';
+                modalMessage.parentNode.insertBefore(prependMessage, modalMessage);
+            }
             showModal(deleteModal, deleteCancel);
         });
         deleteCancel.addEventListener('click', () => {
@@ -684,26 +695,32 @@ document.addEventListener('DOMContentLoaded', () => {
         previewMarkdownBtn.addEventListener('click', toggleMarkdownPreview);
 
         settingsButton.addEventListener('click', () => {
-            settingsManager.loadSettings(appSettings);
+            settingsManager.loadSettings();
             showModal(settingsModal, settingsInputAutoSaveStatusInterval);
         });
         settingsCancel.addEventListener('click', () => {
             hideModal(settingsModal);
         });
         settingsReset.addEventListener('click', () => {
-            settingsManager.loadSettings(appSettings, true); // true resets to default
+            settingsManager.loadSettings(true); // true resets to default
             hideModal(settingsModal, 'Settings reset');
         });
         settingsSave.addEventListener('click', () => {
-            settingsManager.saveSettings(appSettings);
+            settingsManager.saveSettings();
             hideModal(settingsModal, 'Settings Saved');
         });
         settingsInputAutoSaveStatusInterval.addEventListener('keyup', (e) => {
             if (e.key === 'Enter') {
-                settingsManager.saveSettings(appSettings);
+                settingsManager.saveSettings();
                 hideModal(settingsModal, 'Settings Saved');
             }
-        })
+        });
+        settingsEnableRemoteConnectionMessages.addEventListener('keyup', (e) => {
+            if (e.key === 'Enter') {
+                settingsManager.saveSettings();
+                hideModal(settingsModal, 'Settings Saved');
+            }
+        });
     }
 
     const addShortcutEventListeners = () => {
@@ -784,6 +801,17 @@ document.addEventListener('DOMContentLoaded', () => {
                         break;
                 }
             }
+        });
+    }
+
+    const addThemeEventListeners = () => {
+        // Theme toggle handler
+        themeToggle.addEventListener('click', () => {
+            currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', currentTheme);
+            themeToggle.innerHTML = currentTheme === 'dark' ? '<span class="sun">☀</span>' : '<span class="moon">☽</span>';
+            inheritEditorStyles(previewPane);
+            storageManager.save(THEME_KEY, currentTheme);
         });
     }
 
@@ -875,7 +903,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 toaster.show(err, "error", true);
             });
         
-        settingsManager.loadSettings(appSettings);
+        appSettings = settingsManager.loadSettings();
 
         addEventListeners();
         setupToolTips();
@@ -883,9 +911,6 @@ document.addEventListener('DOMContentLoaded', () => {
             breaks: true,
             gfm: true
         });
-
-        // Initialize WebSocket connection
-        collaborationManager.setupWebSocket();
 
         registerServiceWorker();
     };
