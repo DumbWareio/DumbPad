@@ -59,7 +59,7 @@ document.addEventListener('DOMContentLoaded', () => {
     cursorManager.DEBUG = DEBUG;
     const storageManager = new StorageManager();
     let currentTheme =  storageManager.load(THEME_KEY);
-    const settingsManager = new SettingsManager(storageManager);
+    const settingsManager = new SettingsManager(storageManager, applySettings);
     const confirmationManager = new ConfirmationManager();
 
     // Generate user ID and color
@@ -300,8 +300,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Function to toggle between edit and preview modes
-    const toggleMarkdownPreview = () => {
-        isPreviewMode = !isPreviewMode;
+    function toggleMarkdownPreview(toggle, enable, enableStatusMessage = true) {
+        if (toggle) isPreviewMode = !isPreviewMode;
+        else isPreviewMode = enable;
+         
         if (isPreviewMode) {
             // Render and show the markdown
             inheritEditorStyles(previewPane);
@@ -309,13 +311,13 @@ document.addEventListener('DOMContentLoaded', () => {
             previewContainer.style.display = 'block';
             editorContainer.style.display = 'none';
             previewMarkdownBtn.classList.add('active');
-            toaster.show('Markdown Preview On', 'success');
+            if (enableStatusMessage) toaster.show('Markdown Preview On', 'success');
         } else {
             previewContainer.style.display = 'none';
             editorContainer.style.display = 'block';
             previewMarkdownBtn.classList.remove('active');
             editor.focus();
-            toaster.show('Markdown Preview Off', 'error');
+            if (enableStatusMessage) toaster.show('Markdown Preview Off', 'error');
         }
 
         collaborationManager.updateLocalCursor();
@@ -692,7 +694,7 @@ document.addEventListener('DOMContentLoaded', () => {
         printNotepadBtn.addEventListener('click', () => {
             printNotepad();
         });
-        previewMarkdownBtn.addEventListener('click', toggleMarkdownPreview);
+        previewMarkdownBtn.addEventListener('click', () => toggleMarkdownPreview(true));
 
         settingsButton.addEventListener('click', () => {
             settingsManager.loadSettings();
@@ -881,6 +883,10 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
     }
+    
+    function applySettings(currentSettings) {
+        toggleMarkdownPreview(false, currentSettings.defaultMarkdownPreview, false);
+    };
 
     const searchManager = new SearchManager(fetchWithPin, selectNotepad, closeAllModals);
 
@@ -911,6 +917,8 @@ document.addEventListener('DOMContentLoaded', () => {
             breaks: true,
             gfm: true
         });
+
+        applySettings(appSettings);
 
         registerServiceWorker();
     };

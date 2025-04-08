@@ -290,9 +290,8 @@ code {
 }
 
 .modal-input {
-    width: 100%;
-    padding: 0.75rem;
-    margin-bottom: 1rem;
+    width: 75%;
+    padding: 0.5rem;
     border: 1px solid var(--secondary-color);
     border-radius: 6px;
     background-color: var(--textarea-bg);
@@ -627,15 +626,19 @@ code {
 }
 
 .settings-form {
-    margin-bottom: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-top: 1rem;
+    /* margin-bottom: 1.5rem; */
 }
 
-.checkbox-label {
+.settings-label {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
 }
-.checkbox-label input {
+.settings-label input {
     margin-top: 0.5rem;
 }
 
