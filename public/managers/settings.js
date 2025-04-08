@@ -1,15 +1,18 @@
 export default class SettingsManager {
-  constructor(storageManager) {
+  constructor(storageManager, applySettings) {
     this.storageManager = storageManager;
     this.SETTINGS_KEY = 'dumbpad_settings';
+    this.applySettings = applySettings
     this.settingsInputAutoSaveStatusInterval = document.getElementById('autosave-status-interval-input');
     this.settingsEnableRemoteConnectionMessages = document.getElementById('settings-remote-connection-messages');
+    this.settingsDefaultMarkdownPreview = document.getElementById('settings-default-markdown-preview');
   }
   
   defaultSettings() {
     return { // Add additional default settings in here:
       saveStatusMessageInterval: 500,
       enableRemoteConnectionMessages: false,
+      defaultMarkdownPreview: false,
     }
   }
 
@@ -30,6 +33,7 @@ export default class SettingsManager {
       const settingsToSave = reset ? this.defaultSettings() : this.getInputValues();
       this.storageManager.save(this.SETTINGS_KEY, settingsToSave);
       // console.log("Saved new settings:", newSettings);
+      this.applySettings(settingsToSave);
       return settingsToSave;
     }
     catch (err) {
@@ -51,6 +55,9 @@ export default class SettingsManager {
 
       appSettings.enableRemoteConnectionMessages = currentSettings.enableRemoteConnectionMessages;
       this.settingsEnableRemoteConnectionMessages.checked = currentSettings.enableRemoteConnectionMessages;
+
+      appSettings.defaultMarkdownPreview = currentSettings.defaultMarkdownPreview;
+      this.settingsDefaultMarkdownPreview.checked = currentSettings.defaultMarkdownPreview;
       
       return currentSettings;
     }
@@ -69,6 +76,8 @@ export default class SettingsManager {
 
     appSettings.enableRemoteConnectionMessages = this.settingsEnableRemoteConnectionMessages.checked;
 
+    appSettings.defaultMarkdownPreview = this.settingsDefaultMarkdownPreview.checked;
+    
     return appSettings;
   }
 }

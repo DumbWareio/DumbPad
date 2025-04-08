@@ -136,6 +136,7 @@ docker run -p 3000:3000 -v "${PWD}\data:/app/data" dumbwareio/dumbpad:latest
 * 🎨 Clean, modern interface
 * 📦 Docker support with easy configuration
 * 🌐 Optional CORS support
+* ⚙️ Customizable settings
 
 ## Configuration
 
