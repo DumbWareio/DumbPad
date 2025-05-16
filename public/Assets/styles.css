@@ -124,6 +124,37 @@ main {
     flex: 1;
 }
 
+/* Custom Scrollbars */
+/* Webkit browsers */
+::-webkit-scrollbar {
+    width: 10px;
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 8px;
+    border: 2px solid var(--bg-color);
+    min-height: 40px;
+    transition: background 0.2s;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-color);
+}
+::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+/* Firefox */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--secondary-color) transparent;
+}
+
+/* Scrollbars for specific scrollable containers */
+#editor, #preview-pane {
+    scrollbar-width: thin;
+    scrollbar-color: var(--secondary-color) transparent;
+}
 
 #editor, #preview-pane {
     width: 100%;
@@ -147,7 +178,7 @@ main {
 }
 
 .editor-container, .preview-container {
-    height: calc(100vh - 145px);
+    height: calc(100vh - 9rem);
     border-radius: 12px;
     overflow: hidden;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
@@ -231,7 +262,7 @@ code {
     color: var(--text-color);
     font-size: 0.875rem;
     min-width: 5rem;
-    max-width: 13rem;
+    max-width: 8rem;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -290,7 +321,7 @@ code {
 }
 
 .modal-input {
-    width: 75%;
+    width: 100%;
     padding: 0.5rem;
     border: 1px solid var(--secondary-color);
     border-radius: 6px;
@@ -303,6 +334,7 @@ code {
     display: flex;
     justify-content: flex-end;
     gap: 1rem;
+    margin-top: 1rem;
 }
 
 .modal-buttons button {
@@ -768,6 +800,7 @@ input[type="checkbox"] {
         margin: 0, auto;
         padding: 0, auto;
         width: auto;
+        max-width: 15rem;
     }
     
     .select-wrapper {
@@ -781,5 +814,14 @@ input[type="checkbox"] {
         max-height: 71vh;
         margin: 0, auto;
         padding: 0, auto;
+    }
+    #editor {
+        padding: 0.3rem;
+    }
+}
+
+@media (max-width: 375px) {
+    .editor-container, .preview-container {
+        max-height: 65vh;
     }
 }
