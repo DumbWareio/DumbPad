@@ -240,8 +240,13 @@ Made with ❤️ by DumbWare.io
 
 ## 🌐 Check Us Out
 - **Website:** [dumbware.io](https://www.dumbware.io/)
-- **Buy Us a Coffee:** [buymeacoffee.com/dumbware](https://buymeacoffee.com/dumbware) ☕
 - **Join the Chaos:** [Discord](https://discord.gg/zJutzxWyq2) 💬
+
+## Support the Project
+
+<a href="https://www.buymeacoffee.com/dumbware" target="_blank">
+  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="60">
+</a>
 
 ## Future Features
 
