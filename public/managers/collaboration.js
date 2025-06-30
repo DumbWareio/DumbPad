@@ -2,7 +2,7 @@ import { marked } from '/js/marked/marked.esm.js';
 
 export class CollaborationManager {
     constructor({ userId, userColor, currentNotepadId, operationsManager, editor, onNotepadChange, onUserDisconnect, onCursorUpdate,
-            settingsManager, toaster, confirmationManager, saveNotes, renameNotepad
+            settingsManager, toaster, confirmationManager, saveNotes, renameNotepad, addCopyButtonsToCodeBlocks
         })
     {
         this.userId = userId;
@@ -20,6 +20,7 @@ export class CollaborationManager {
         this.confirmationManager = confirmationManager;
         this.saveNotes = saveNotes;
         this.renameNotepad = renameNotepad;
+        this.addCopyButtonsToCodeBlocks = addCopyButtonsToCodeBlocks;
 
         this.ws = null;
         this.isReceivingUpdate = false;
@@ -198,6 +199,11 @@ export class CollaborationManager {
             
             // Update the preview pane in markdown
             this.previewPane.innerHTML = marked.parse(this.editor.value);
+            
+            // Add copy buttons to code blocks if callback is available
+            if (this.addCopyButtonsToCodeBlocks) {
+                this.addCopyButtonsToCodeBlocks();
+            }
 
             // Adjust cursor position based on operation type and position
             let newPos = currentPos;

@@ -7,6 +7,8 @@ import StorageManager from './managers/storage.js';
 import SettingsManager from './managers/settings.js'
 import ConfirmationManager from './managers/confirmation.js';
 import { marked } from '/js/marked/marked.esm.js';
+import markedExtendedTables from '/js/marked-extended-tables/index.js';
+import markedAlert from '/js/marked-alert/index.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     const DEBUG = false;
@@ -21,6 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const sunIcon = document.getElementById('sun-icon');
     const moonIcon = document.getElementById('moon-icon');
     const toaster = new ToastManager(document.getElementById('toast-container'));
+    const copyLinkBtn = document.getElementById('copy-link');
     const notepadSelector = document.getElementById('notepad-selector');
     const newNotepadBtn = document.getElementById('new-notepad');
     const renameNotepadBtn = document.getElementById('rename-notepad');
@@ -53,6 +56,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const SAVE_INTERVAL = 2000;
     let currentNotepadId = 'default';
     let previousEditorValue = editor.value;
+    let currentNotepads = []; // Global array to hold current notepads list
+    let isInitialLoad = true; // Track if this is the initial page load
 
     // Initialize managers
     const operationsManager = new OperationsManager();
@@ -85,7 +90,8 @@ document.addEventListener('DOMContentLoaded', () => {
         toaster,
         confirmationManager,
         saveNotes,
-        renameNotepad
+        renameNotepad,
+        addCopyButtonsToCodeBlocks: () => addCopyButtonsToCodeBlocks()
     });
     collaborationManager.DEBUG = DEBUG;
     collaborationManager.setupWebSocket(); // Initialize WebSocket connection immediately
@@ -130,13 +136,80 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    // Copy current notepad link to clipboard
+    const copyCurrentNotepadLink = async () => {
+        try {
+            const currentUrl = window.location.href;
+            await navigator.clipboard.writeText(currentUrl);
+            toaster.show('Link copied to clipboard', 'success');
+        } catch (err) {
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea');
+            textArea.value = window.location.href;
+            document.body.appendChild(textArea);
+            textArea.select();
+            
+            try {
+                document.execCommand('copy');
+                toaster.show('Link copied to clipboard', 'success');
+            } catch (fallbackErr) {
+                toaster.show('Failed to copy link', 'error');
+            }
+            
+            document.body.removeChild(textArea);
+        }
+    };
+
+    // Update URL with notepad name without reloading the page
+    function updateUrlWithNotepad(notepadName) {
+        if (!notepadName) return;
+        
+        const url = new URL(window.location);
+        url.searchParams.set('id', notepadName);
+        
+        // Use pushState to update URL without reloading
+        window.history.pushState({ notepadName }, '', url.toString());
+    }
+
+    // Handle query parameter selection on initial page load
+    function handleQueryParameterSelection(notepadsList, defaultNotepadId) {
+        if (!isInitialLoad) {
+            return defaultNotepadId; // Return default if not initial load
+        }
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const requestedId = urlParams.get('id');
+        
+        if (requestedId) {
+            // Try to find notepad by ID first, then by name (case-insensitive)
+            const foundNotepad = notepadsList.find(np => 
+                np.id === requestedId || np.name.toLowerCase() === requestedId.toLowerCase()
+            );
+            
+            if (foundNotepad) {
+                return foundNotepad.id;
+            } else {
+                // Notepad not found, show error toast
+                toaster.show(`Notepad '${requestedId}' not found`, 'error');
+            }
+        }
+        
+        return defaultNotepadId; // Return default if no query param or not found
+    }
+
     // Load notepads list
     async function loadNotepads() {
         try {
             const response = await fetchWithPin('/api/notepads');
             const data = await response.json();
+            
+            // Store notepads list globally for navigation and lookup
+            currentNotepads = data.notepads_list;
 
-            currentNotepadId = data['note_history'];
+            // Handle query parameter selection (only on initial page load)
+            const selectedNotepadId = handleQueryParameterSelection(data.notepads_list, data['note_history']);
+            
+            currentNotepadId = selectedNotepadId;
             if (collaborationManager) {
                 const currentNotepadExists = data.notepads_list.some(np => np.id === currentNotepadId);
                 if (currentNotepadExists) await selectNotepad(currentNotepadId);
@@ -144,7 +217,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             notepadSelector.innerHTML = data.notepads_list
-                .map(pad => `<option value="${pad.id}"${pad.id === currentNotepadId ? 'selected' : ''}>${pad.name}</option>`)
+                .map(pad => `<option value="${pad.id}"${pad.id === currentNotepadId ? ' selected' : ''}>${pad.name}</option>`)
                 .join('');
         } catch (err) {
             console.error('Error loading notepads:', err);
@@ -163,6 +236,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isPreviewMode) {
                 // Update preview if in preview mode
                 previewPane.innerHTML = marked.parse(data.content);
+                addCopyButtonsToCodeBlocks(); // Add copy buttons after rendering
             }
         } catch (err) {
             console.error('Error loading notes:', err);
@@ -263,6 +337,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Update markdown preview in real-time if in preview mode
             if (isPreviewMode) {
                 previewPane.innerHTML = marked.parse(target.value);
+                addCopyButtonsToCodeBlocks(); // Add copy buttons after rendering
             }
 
             debouncedSave(target.value);
@@ -294,6 +369,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Update markdown preview in real-time if in preview mode
             if (isPreviewMode) {
                 previewPane.innerHTML = marked.parse(target.value);
+                addCopyButtonsToCodeBlocks(); // Add copy buttons after rendering
             }
         
             debouncedSave(target.value);
@@ -310,6 +386,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Render and show the markdown
             inheritEditorStyles(previewPane);
             previewPane.innerHTML = marked.parse(editor.value);
+            addCopyButtonsToCodeBlocks(); // Add copy buttons after rendering
             previewContainer.style.display = 'block';
             editorContainer.style.display = 'none';
             previewMarkdownBtn.classList.add('active');
@@ -331,6 +408,60 @@ document.addEventListener('DOMContentLoaded', () => {
         element.style.padding = window.getComputedStyle(editor).padding;
     }
 
+    // Add copy buttons to code blocks
+    function addCopyButtonsToCodeBlocks() {
+        const codeBlocks = previewPane.querySelectorAll('pre');
+        
+        codeBlocks.forEach(pre => {
+            // Remove existing copy button if present
+            const existingButton = pre.querySelector('.copy-button');
+            if (existingButton) {
+                existingButton.remove();
+            }
+            
+            // Create copy button
+            const copyButton = document.createElement('button');
+            copyButton.className = 'copy-button';
+            copyButton.innerHTML = `
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                    <path d="M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z" />
+                    <path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" />
+                </svg>
+            `;
+            copyButton.setAttribute('aria-label', 'Copy to clipboard');
+            
+            // Add click handler
+            copyButton.addEventListener('click', async () => {
+                const codeElement = pre.querySelector('code');
+                const textToCopy = codeElement ? codeElement.textContent : pre.textContent;
+                
+                try {
+                    await navigator.clipboard.writeText(textToCopy);
+                    toaster.show('Copied to clipboard');
+                } catch (err) {
+                    // Fallback for older browsers
+                    const textArea = document.createElement('textarea');
+                    textArea.value = textToCopy;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    
+                    try {
+                        document.execCommand('copy');
+                        toaster.show('Copied to clipboard');
+                    } catch (fallbackErr) {
+                        toaster.show('Failed to copy code', 'error');
+                    }
+                    
+                    document.body.removeChild(textArea);
+                }
+            });
+            
+            // Add button to the pre element
+            pre.appendChild(copyButton);
+        });
+    }
+
     /* Notepad Controls */
     // Create new notepad
     const createNotepad = async () => {
@@ -349,6 +480,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 previewPane.innerHTML = '';
             }
             
+            // Update URL with new notepad name
+            updateUrlWithNotepad(newNotepad.name);
+            
             if (collaborationManager.ws && collaborationManager.ws.readyState === WebSocket.OPEN) {
                 collaborationManager.ws.send(JSON.stringify({
                     type: 'notepad_change'
@@ -365,26 +499,38 @@ document.addEventListener('DOMContentLoaded', () => {
     // Rename notepad
     async function renameNotepad(newName, showStatus = true) {
         try {
-            await fetchWithPin(`/api/notepads/${currentNotepadId}`, {
+            const response = await fetchWithPin(`/api/notepads/${currentNotepadId}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({ name: newName }),
             });
+            
+            const result = await response.json();
             await loadNotepads();
             notepadSelector.value = currentNotepadId;
             
-            // Broadcast the rename to other users
+            // Show notification if the backend modified the name for uniqueness
+            if (result.name !== newName && showStatus) {
+                toaster.show(`Name changed to "${result.name}" to ensure uniqueness`);
+            }
+            
+            // Update URL with new notepad name
+            updateUrlWithNotepad(result.name);
+            
+            // Broadcast the rename to other users (use the final name from server)
             if (collaborationManager.ws && collaborationManager.ws.readyState === WebSocket.OPEN) {
                 collaborationManager.ws.send(JSON.stringify({
                     type: 'notepad_rename',
                     notepadId: currentNotepadId,
-                    newName: newName
+                    newName: result.name
                 }));
             }
 
-            if (showStatus) toaster.show('Renamed notepad')
+            if (showStatus && result.name === newName) {
+                toaster.show('Renamed notepad');
+            }
         } catch (err) {
             console.error('Error renaming notepad:', err);
             toaster.show('Error renaming notepad', 'error', true);
@@ -507,37 +653,115 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // Print current notepad
-    const printNotepad = () => {
+    const printNotepad = async () => {
         const notepadName = notepadSelector.options[notepadSelector.selectedIndex].text;
         const content = editor.value;
         
         const printWindow = window.open('', '_blank');
 
-        const formattedContent = notepadName.toLowerCase().endsWith('.md') || isPreviewMode
+        let formattedContent = notepadName.toLowerCase().endsWith('.md') || isPreviewMode
             ? marked.parse(content)
             : content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
         
+        // Auto-expand details elements for print by adding 'open' attribute
+        const currentSettings = settingsManager.getSettings();
+        if (formattedContent.includes('<details') && !currentSettings.disablePrintExpand) {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = formattedContent;
+            
+            // Find all details elements and add the 'open' attribute
+            const detailsElements = tempDiv.querySelectorAll('details');
+            detailsElements.forEach(details => {
+                details.setAttribute('open', '');
+            });
+            
+            formattedContent = tempDiv.innerHTML;
+        }
+        
+        // Get current theme
+        const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+        
+        // Load main and preview styles for print
+        let mainStyles = '';
+        let previewStyles = '';
+        let printStyles = '';
+        try {
+            const [mainResponse, previewResponse] = await Promise.all([
+                fetch('Assets/styles.css'),
+                fetch('Assets/preview-styles.css')
+            ]);
+            mainStyles = await mainResponse.text();
+            previewStyles = await previewResponse.text();
+        } catch (error) {
+            console.warn('Could not load styles for print:', error);
+        }
+        
+        // Create print-specific styles by wrapping preview styles in @media print
+        printStyles = `
+            /* Base print layout */
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                line-height: 1.6;
+                padding: 2rem;
+                color: var(--text-color);
+                background-color: var(--bg-color);
+                margin: 0;
+            }
+
+            /* Ensure proper theme inheritance */
+            * {
+                color: inherit;
+                background-color: inherit;
+            }
+
+            @media print {
+                /* Force browsers to print background colors */
+                body {
+                    padding: 1rem;
+                    color: var(--text-color) !important;
+                    background-color: var(--bg-color) !important;
+                    -webkit-print-color-adjust: exact !important;
+                    color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                }
+
+                /* Force all elements to preserve their theme colors */
+                *, *::before, *::after {
+                    -webkit-print-color-adjust: exact !important;
+                    color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                }
+
+                /* Hide copy buttons in print */
+                .copy-button {
+                    display: none !important;
+                }
+
+                /* Inject all preview styles into print media */
+                ${previewStyles}
+            }
+        `;
+        
         printWindow.document.write(`
             <!DOCTYPE html>
-            <html>
+            <html data-theme="${currentTheme}">
             <head>
                 <title>${notepadName}</title>
                 <style>
-                    body {
-                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                        line-height: 1.6;
-                        padding: 2rem;
-                        white-space: pre-wrap;
-                    }
-                    @media print {
-                        body {
-                            padding: 0;
-                        }
-                    }
+                    /* Main application styles */
+                    ${mainStyles}
+                    
+                    /* Preview styles */
+                    ${previewStyles}
+                    
+                    /* Dynamic print styles with injected preview styles */
+                    ${printStyles}
                 </style>
             </head>
             <body>
-                ${formattedContent}
+                <div id="preview-pane">
+                    ${formattedContent}
+                </div>
             </body>
             </html>
         `);
@@ -581,6 +805,12 @@ document.addEventListener('DOMContentLoaded', () => {
         editor.focus();
 
         notepadSelector.selectedIndex = getNotepadIndexById(id);
+        
+        // Update URL with selected notepad name
+        const selectedOption = notepadSelector.options[notepadSelector.selectedIndex];
+        if (selectedOption) {
+            updateUrlWithNotepad(selectedOption.text);
+        }
     }
 
     const getNextNotepadIndex = (forward = true) => {
@@ -621,6 +851,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const addNotepadControlsEventListeners = () => {
+        copyLinkBtn.addEventListener('click', copyCurrentNotepadLink);
+        
         notepadSelector.addEventListener('change', async (e) => {
             await selectNotepad(e.target.value);
         });
@@ -818,20 +1050,161 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    const registerServiceWorker = () => {
+    const registerServiceWorker = async () => {
+        // Helper function to check service worker version
+        const checkServiceWorkerVersion = async (currentAppVersion) => {
+            if (navigator.serviceWorker.controller) {
+                const messageChannel = new MessageChannel();
+                
+                messageChannel.port1.onmessage = (event) => {
+                    const { updated, firstInstall, version } = event.data;
+                    console.log('Service worker version check result:', { updated, firstInstall, version });
+                    
+                    // Update header title tooltip with current version
+                    const headerTitle = document.getElementById('header-title');
+                    headerTitle.setAttribute('data-tooltip', `Version: ${version}`);
+                    
+                    if (updated && !firstInstall) {
+                        console.log('Cache updated - reloading page');
+                        toaster.show('App updated! Reloading...');
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1000);
+                    } else if (updated && firstInstall) {
+                        console.log('Cache installed for the first time');
+                    }
+                };
+                
+                navigator.serviceWorker.controller.postMessage(
+                    { 
+                        type: 'CHECK_VERSION',
+                        currentVersion: currentAppVersion 
+                    }, 
+                    [messageChannel.port2]
+                );
+            }
+        };
+
         // Register PWA Service Worker
         if ("serviceWorker" in navigator) {
-           navigator.serviceWorker.register("/service-worker.js")
-               .then((reg) => console.log("Service Worker registered:", reg.scope))
-               .catch((err) => console.log("Service Worker registration failed:", err));
+           try {
+               const registration = await navigator.serviceWorker.register("/service-worker.js");
+               console.log("Service Worker registered:", registration.scope);
+               
+               // Get the current app version from config
+               const configResponse = await fetchWithPin('/api/config');
+               const config = await configResponse.json();
+               const currentAppVersion = config.version;
+               
+               // Check for updates
+               registration.addEventListener('updatefound', () => {
+                   console.log('Service Worker update found');
+                   const newWorker = registration.installing;
+                   
+                   newWorker.addEventListener('statechange', () => {
+                       if (newWorker.state === 'installed') {
+                           if (navigator.serviceWorker.controller) {
+                               // New service worker is installed, but old one is still controlling
+                               console.log('New service worker available, will activate on next page load');
+                               // The service worker will handle the cache update and page reload
+                           } else {
+                               // First service worker installation
+                               console.log('Service worker installed for the first time');
+                           }
+                       }
+                   });
+               });
+
+               // Listen for service worker controller changes
+               navigator.serviceWorker.addEventListener('controllerchange', () => {
+                   console.log('Service worker controller changed - new version active');
+                   // Wait a bit for the new service worker to be ready, then check version
+                   setTimeout(() => {
+                       checkServiceWorkerVersion(currentAppVersion);
+                   }, 100);
+               });
+
+               // Wait for service worker to be ready, then check version
+               await navigator.serviceWorker.ready;
+               
+               // Initial version check
+               await checkServiceWorkerVersion(currentAppVersion);
+           } catch (err) {
+               console.log("Service Worker registration failed:", err);
+               // Fallback: set version from config if service worker fails
+               try {
+                   const configResponse = await fetchWithPin('/api/config');
+                   const config = await configResponse.json();
+                   const headerTitle = document.getElementById('header-title');
+                   headerTitle.setAttribute('data-tooltip', `Version: ${config.version} (no cache)`);
+               } catch (configErr) {
+                   console.log("Config fetch failed:", configErr);
+               }
+           }
+
+           // Listen for messages from service worker
+           navigator.serviceWorker.addEventListener('message', event => {
+               if (event.data && event.data.type === 'CACHE_UPDATED') {
+                   // Update tooltip with the new version
+                   if (event.data.version) {
+                       const headerTitle = document.getElementById('header-title');
+                       headerTitle.setAttribute('data-tooltip', `Version: ${event.data.version}`);
+                   }
+                   
+                   if (event.data.reload) {
+                       console.log('Cache updated - reloading page');
+                       toaster.show('App updated! Reloading...');
+                       setTimeout(() => {
+                           window.location.reload();
+                       }, 1000);
+                   }
+               } else if (event.data && event.data.type === 'CACHE_INSTALLED') {
+                   // Update tooltip with the new version
+                   if (event.data.version) {
+                       const headerTitle = document.getElementById('header-title');
+                       headerTitle.setAttribute('data-tooltip', `Version: ${event.data.version}`);
+                   }
+                   
+                   console.log('Cache installed for the first time');
+               }
+           });
        }
-   }
+    }
+    
+    const addBrowserNavigationListener = () => {
+        // Handle browser back/forward buttons
+        window.addEventListener('popstate', async (event) => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const requestedId = urlParams.get('id');
+            
+            if (requestedId && currentNotepads.length > 0) {
+                // Find notepad by name (case-insensitive) or ID
+                const foundNotepad = currentNotepads.find(np => 
+                    np.id === requestedId || np.name.toLowerCase() === requestedId.toLowerCase()
+                );
+                
+                if (foundNotepad && foundNotepad.id !== currentNotepadId) {
+                    // Don't update URL again since we're responding to a popstate
+                    const tempSelectNotepad = async (id) => {
+                        currentNotepadId = id;
+                        collaborationManager.currentNotepadId = currentNotepadId;
+                        await loadNotes(currentNotepadId);
+                        editor.focus();
+                        notepadSelector.selectedIndex = getNotepadIndexById(id);
+                    };
+                    
+                    await tempSelectNotepad(foundNotepad.id);
+                }
+            }
+        });
+    };
 
     const addEventListeners = () => {
         addThemeEventListeners();
         addEditorEventListeners();
         addNotepadControlsEventListeners();
         addShortcutEventListeners();
+        addBrowserNavigationListener();
         searchManager.addEventListeners();
     }
 
@@ -889,10 +1262,25 @@ document.addEventListener('DOMContentLoaded', () => {
         toggleMarkdownPreview(false, currentSettings.defaultMarkdownPreview, false);
     };
 
+    function initializeMarkDown() {
+        // Configure marked with extended tables support
+        marked.use(markedExtendedTables()); // Use marked-extended-tables for table support
+        marked.use(markedAlert()); // Use marked-alert for alert blocks
+        marked.setOptions({ // Set up markdown parser
+            breaks: true,
+            gfm: true
+        });
+    }
+
     const searchManager = new SearchManager(fetchWithPin, selectNotepad, closeAllModals);
 
     // Initialize the app
     const initializeApp = async () => {
+        await registerServiceWorker();
+        initializeMarkDown();
+        setupToolTips();
+        addEventListeners();
+
         fetch(`/api/config`)
             .then(response => response.json())
             .then(config => {
@@ -902,7 +1290,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('header-title').textContent = config.siteTitle;
 
                 loadNotepads().then(() => {
-                    loadNotes(currentNotepadId);
+                    loadNotes(currentNotepadId).then(() => {
+                        // Update URL with current notepad name if no query param was present
+                        const urlParams = new URLSearchParams(window.location.search);
+                        if (!urlParams.has('id') && currentNotepads.length > 0) {
+                            const currentNotepad = currentNotepads.find(np => np.id === currentNotepadId);
+                            if (currentNotepad) {
+                                updateUrlWithNotepad(currentNotepad.name);
+                            }
+                        }
+                    });
+                    // Mark initial load as complete after first load
+                    isInitialLoad = false;
                 });
             })
             .catch(err => {
@@ -911,17 +1310,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         
         appSettings = settingsManager.loadSettings();
-
-        addEventListeners();
-        setupToolTips();
-        marked.setOptions({ // Set up markdown parser
-            breaks: true,
-            gfm: true
-        });
-
         applySettings(appSettings);
-
-        registerServiceWorker();
     };
 
 
