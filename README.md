@@ -2,6 +2,17 @@
 
 A stupid simple, no auth (unless you want it!), modern notepad application with auto-save functionality and dark mode support.
 
+<p align="center">
+  <img src="https://img.shields.io/github/package-json/v/dumbwareio/dumbpad" alt="GitHub package.json version" />
+  <a href="https://hub.docker.com/r/dumbwareio/dumbpad" target="_blank"><img src="https://img.shields.io/docker/v/dumbwareio/dumbpad?logo=docker&label=Docker" alt="Docker Image Version" /></a>
+  <img src="https://img.shields.io/docker/pulls/dumbwareio/dumbpad" alt="Docker Pulls" />
+  <img src="https://img.shields.io/badge/license-GPL--3.0-blue.svg" alt="License" />
+  <img src="https://img.shields.io/github/actions/workflow/status/dumbwareio/dumbpad/docker-publish.yml" alt="GitHub Actions Workflow Status" />
+  <!-- <a href="https://dumbpad.dumbware.io/" target="_blank">
+    <img alt="Static Badge" src="https://img.shields.io/badge/demo-site?label=dumbpad" />
+  </a> -->
+</p>
+
 ![image](https://github.com/user-attachments/assets/baf945a8-327b-472a-abf9-bf03af6e7079)
 
 ## Table of Contents
