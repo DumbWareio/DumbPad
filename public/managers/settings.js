@@ -6,6 +6,7 @@ export default class SettingsManager {
     this.settingsInputAutoSaveStatusInterval = document.getElementById('autosave-status-interval-input');
     this.settingsEnableRemoteConnectionMessages = document.getElementById('settings-remote-connection-messages');
     this.settingsDefaultMarkdownPreview = document.getElementById('settings-default-markdown-preview');
+    this.settingsDisablePrintExpand = document.getElementById('settings-disable-print-expand');
   }
   
   defaultSettings() {
@@ -13,6 +14,7 @@ export default class SettingsManager {
       saveStatusMessageInterval: 500,
       enableRemoteConnectionMessages: false,
       defaultMarkdownPreview: false,
+      disablePrintExpand: false,
     }
   }
 
@@ -58,6 +60,9 @@ export default class SettingsManager {
 
       appSettings.defaultMarkdownPreview = currentSettings.defaultMarkdownPreview;
       this.settingsDefaultMarkdownPreview.checked = currentSettings.defaultMarkdownPreview;
+
+      appSettings.disablePrintExpand = currentSettings.disablePrintExpand;
+      this.settingsDisablePrintExpand.checked = currentSettings.disablePrintExpand;
       
       return currentSettings;
     }
@@ -77,6 +82,8 @@ export default class SettingsManager {
     appSettings.enableRemoteConnectionMessages = this.settingsEnableRemoteConnectionMessages.checked;
 
     appSettings.defaultMarkdownPreview = this.settingsDefaultMarkdownPreview.checked;
+
+    appSettings.disablePrintExpand = this.settingsDisablePrintExpand.checked;
     
     return appSettings;
   }

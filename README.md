@@ -2,9 +2,10 @@
 
 A stupid simple, no auth (unless you want it!), modern notepad application with auto-save functionality and dark mode support.
 
-![image](https://github.com/user-attachments/assets/c7138bc4-3a9f-456a-a049-67a03a2f45a5)
+![image](https://github.com/user-attachments/assets/baf945a8-327b-472a-abf9-bf03af6e7079)
 
 ## Table of Contents
+
 - [Features](#features)
 - [Quick Start](#quick-start)
   - [Prerequisites](#prerequisites)
@@ -28,16 +29,22 @@ A stupid simple, no auth (unless you want it!), modern notepad application with 
 - Optional PIN protection (4-10 digits)
 - File-based storage
 - Data persistence across updates
-- Markdown Formatting
+- Markdown Formatting with enhanced support
+  - GitHub-style alert blocks (Note, Tip, Important, Warning, Caution)
+  - Extended table formatting
+  - Auto-expand collapsible details in print (configurable)
+- Direct notepad linking with URL parameters
+- Copy shareable notepad links
+- Browser navigation support (back/forward buttons)
 - Fuzzy Search (by filename and file contents)
-- PWA Support
+- PWA Support with automatic cache updates
 
 ## Quick Start
 
 ### Prerequisites
 
-* Docker (recommended)
-* Node.js >=20.0.0 (for local development)
+- Docker (recommended)
+- Node.js >=20.0.0 (for local development)
 
 ### Option 1: Docker (For Dummies)
 
@@ -83,6 +90,7 @@ services:
 ```
 
 Then run:
+
 ```bash
 docker compose up -d
 ```
@@ -94,11 +102,13 @@ docker compose up -d
 ### Option 3: Running Locally (For Developers)
 
 1. Install dependencies:
+
 ```bash
 npm install
 ```
 
 2. Set environment variables in `.env` or `cp .env.example .env`:
+
 ```bash
 PORT=3000                  # Port to run the server on
 DUMBPAD_PIN=1234          # Optional PIN protection
@@ -107,6 +117,7 @@ BASE_URL=http://localhost:3000  # Base URL for the application
 ```
 
 3. Start the server:
+
 ```bash
 npm start
 ```
@@ -114,85 +125,121 @@ npm start
 #### Windows Users
 
 If you're using Windows PowerShell with Docker, use this format for paths:
+
 ```powershell
 docker run -p 3000:3000 -v "${PWD}\data:/app/data" dumbwareio/dumbpad:latest
 ```
 
 ## Features
 
-* 📝 Auto-saving notes
-* 🌓 Dark/Light mode support
-* 🔒 Optional PIN protection
-* 📱 Mobile-friendly interface / PWA Support
-* 🗂️ Multiple notepads
-* 📄 Markdown Formatting
-* ⬇️ Download notes as text or markdown files
-* 🔍 Fuzzy Search by name or contents
-* 🖨️ Print functionality
-* 🔄 Real-time saving
-* 💽 Add .txt files into data folder to import (requires page refresh) 
-* ⚡ Zero dependencies on client-side
-* 🛡️ Built-in security features
-* 🎨 Clean, modern interface
-* 📦 Docker support with easy configuration
-* 🌐 Optional CORS support
-* ⚙️ Customizable settings
+- 📝 Auto-saving notes
+- 🌓 Dark/Light mode support
+- 🔒 Optional PIN protection
+- 📱 Mobile-friendly interface / PWA Support
+- 🗂️ Multiple notepads
+- 📄 Enhanced Markdown Formatting with GitHub-style alerts and extended tables
+- 🔗 Direct notepad linking with shareable URLs
+- 🧭 Browser navigation support (back/forward buttons)
+- ⬇️ Download notes as text or markdown files
+- �️ Print functionality with auto-expanded collapsible sections
+- �🔍 Fuzzy Search by name or contents
+- 🔄 Real-time saving
+- 💽 Add .txt files into data folder to import (requires page refresh)
+- ⚡ Zero dependencies on client-side
+- 🛡️ Built-in security features
+- 🎨 Clean, modern interface
+- 📦 Docker support with easy configuration
+- 🌐 Optional CORS support
+- ⚙️ Customizable settings
+- 🔄 Automatic cache updates and version management
 
 ## Configuration
 
 ### Environment Variables
 
-| Variable                  | Description                                                                        | Default                     | Required |
-|---------------------------|------------------------------------------------------------------------------------|-----------------------------|----------|
-| PORT                      | Server port                                                                       | 3000                        | No       |
-| BASE_URL                  | Base URL for the application                                                      | http://localhost:PORT       | Yes      |
-| DUMBPAD_PIN               | PIN protection (4-10 digits)                                                      | None                        | No       |
-| SITE_TITLE                | Site title displayed in header                                                    | DumbPad                     | No       |
-| NODE_ENV                  | Node environment mode (development or production)                                 | production                  | No       |
-| ALLOWED_ORIGINS           | Allowed CORS origins (`*` for all or comma-separated list)                        | *                           | No       |
-| LOCKOUT_TIME              | Lockout time after max PIN attempts (in minutes)                                  | 15                          | No       |
-| MAX_ATTEMPTS              | Maximum PIN entry attempts before lockout                                         | 5                           | No       |
-| COOKIE_MAX_AGE            | Maximum age of authentication cookies (in hours)                                  | 24                          | No       |
-| PAGE_HISTORY_COOKIE_AGE   | Age of cookie storing last opened notepad (in days, max 400)                      | 365                         | No       |
+| Variable                | Description                                                  | Default               | Required |
+| ----------------------- | ------------------------------------------------------------ | --------------------- | -------- |
+| PORT                    | Server port                                                  | 3000                  | No       |
+| BASE_URL                | Base URL for the application                                 | http://localhost:PORT | Yes      |
+| DUMBPAD_PIN             | PIN protection (4-10 digits)                                 | None                  | No       |
+| SITE_TITLE              | Site title displayed in header                               | DumbPad               | No       |
+| NODE_ENV                | Node environment mode (development or production)            | production            | No       |
+| ALLOWED_ORIGINS         | Allowed CORS origins (`*` for all or comma-separated list)   | \*                    | No       |
+| LOCKOUT_TIME            | Lockout time after max PIN attempts (in minutes)             | 15                    | No       |
+| MAX_ATTEMPTS            | Maximum PIN entry attempts before lockout                    | 5                     | No       |
+| COOKIE_MAX_AGE          | Maximum age of authentication cookies (in hours)             | 24                    | No       |
+| PAGE_HISTORY_COOKIE_AGE | Age of cookie storing last opened notepad (in days, max 400) | 365                   | No       |
 
 ## Security
 
 ### Features
 
-* Variable-length PIN support (4-10 digits)
-* Constant-time PIN comparison
-* Brute force protection:
-  * 5 attempts maximum
-  * 15-minute lockout after failed attempts
-  * IP-based tracking
-* Secure cookie handling
-* No client-side PIN storage
-* Rate limiting
-* Collaborative editing
-* CORS support for origin restrictions (optional)
+- Variable-length PIN support (4-10 digits)
+- Constant-time PIN comparison
+- Brute force protection:
+  - 5 attempts maximum
+  - 15-minute lockout after failed attempts
+  - IP-based tracking
+- Secure cookie handling
+- No client-side PIN storage
+- Rate limiting
+- Collaborative editing
+- CORS support for origin restrictions (optional)
+
+## User Settings
+
+Access settings via the gear icon (⚙️) in the header or use keyboard shortcut:
+
+- **Windows/Linux**: `Ctrl+Alt+,`
+- **macOS**: `Cmd+Ctrl+,`
+
+### Available Settings
+
+| Setting                        | Description                                              | Default  | Options                   |
+| ------------------------------ | -------------------------------------------------------- | -------- | ------------------------- |
+| **Auto-save Status Interval**  | Time interval for auto-save notifications (0 = disabled) | 1000ms   | Any number (milliseconds) |
+| **Remote Connection Messages** | Show notifications when users connect/disconnect         | Enabled  | Enabled/Disabled          |
+| **Disable Print Expansion**    | Prevent auto-expanding collapsed sections when printing  | Disabled | Enabled/Disabled          |
+| **Default Markdown Preview**   | Start in markdown preview mode by default                | Disabled | Enabled/Disabled          |
+
+### Notepad Management
+
+- **Unique Names**: Notepad names are automatically made unique by the server. If you try to create or rename a notepad with an existing name, the server will append a suffix (e.g., "Note-1", "Note-2")
+- **Name Validation**: The server handles all name validation and uniqueness checks. The frontend will display a notification if your requested name was modified
+- **Auto-save**: Changes are automatically saved every 300ms after you stop typing, with periodic saves every 2 seconds
+- **Persistence**: All settings are stored in your browser's local storage and persist across sessions
 
 ## Technical Details
 
 ### Stack
 
-* **Backend**: Node.js (>=20.0.0) with Express
-* **Frontend**: Vanilla JavaScript (ES6+)
-* **Container**: Docker with multi-stage builds
-* **Security**: Express security middleware
-* **Storage**: File-based with auto-save
-* **Theme**: Dynamic dark/light mode with system preference support
+- **Backend**: Node.js (>=20.0.0) with Express
+- **Frontend**: Vanilla JavaScript (ES6+) with enhanced markdown support
+- **Container**: Docker with multi-stage builds
+- **Security**: Express security middleware
+- **Storage**: File-based with auto-save
+- **Theme**: Dynamic dark/light mode with system preference support
+- **PWA**: Service Worker with automatic cache updates and version management
+- **Markdown**: Enhanced with alert blocks, extended tables, and collapsible content
+- **Real-time**: WebSocket-based collaboration and live updates
+- **Navigation**: SPA-style routing with shareable URLs and browser history support
+- **Print**: Advanced print preview with auto-expanding collapsible content and theme preservation
 
 ### Dependencies
 
-* express: Web framework
-* cors: Cross-origin resource sharing
-* dotenv: Environment configuration
-* cookie-parser: Cookie handling
-* express-rate-limit: Rate limiting
-* marked: Markdown formatting
-* fuse.js: Fuzzy searching
+- express: Web framework
+- cors: Cross-origin resource sharing
+- dotenv: Environment configuration
+- cookie-parser: Cookie handling
+- express-rate-limit: Rate limiting
+- marked: Markdown formatting
+- marked-alert: GitHub-style alert blocks for markdown
+- marked-extended-tables: Enhanced table support for markdown
+- fuse.js: Fuzzy searching
+- ws: WebSocket support for real-time collaboration
 
 The `data` directory contains:
+
 - `notepads.json`: List of all notepads
 - Individual `.txt` files for each notepad's content
 - Drop in .txt files to import notes (requires page refresh)
@@ -201,15 +248,66 @@ The `data` directory contains:
 
 ## Usage
 
-- Just start typing! Your notes will be automatically saved.
-- Use the theme toggle in the top-right corner to switch between light and dark mode.
-- Press `Ctrl+S` (or `Cmd+S` on Mac) to force save.
-- Auto-saves every 10 seconds while typing.
-- Create multiple notepads with the + button.
-- Download notepads as .txt or .md files.
-- Hover over notepad controls to view tooltips of keyboard shortcuts
-- Press `Ctrl+K` (or `Cmd+K`) to open fuzzy search
-- If PIN protection is enabled, you'll need to enter the PIN to access the app.
+### Basic Operations
+
+- **Start typing**: Notes auto-save as you type (every 300ms after stopping, with periodic saves every 2 seconds)
+- **Theme toggle**: Switch between light/dark mode with the toggle button
+- **Force save**: `Ctrl+S` (or `Cmd+S` on Mac)
+- **Search**: `Ctrl+K` (or `Cmd+K`) to open fuzzy search across all notepads
+- **Copy link**: Click the link button (🔗) to copy the current notepad's shareable URL
+- **Settings**: Click the gear icon (⚙️) or use `Ctrl+Alt+,` (or `Cmd+Ctrl+,`)
+
+### Notepad Management
+
+- **Create**: Click the + button or `Ctrl+Alt+N` (or `Cmd+Ctrl+N`)
+- **Rename**: Click rename button or `Ctrl+Alt+R` (or `Cmd+Ctrl+R`)
+- **Delete**: Click delete button or `Ctrl+Alt+X` (or `Cmd+Ctrl+X`)
+- **Navigate**: Use dropdown, arrow keys (`Ctrl+Alt+↑/↓`), or browser back/forward buttons
+- **Download**: Click download button or `Ctrl+Alt+A` (or `Cmd+Ctrl+A`) for .txt/.md export
+- **Print**: `Ctrl+P` (or `Cmd+P`) with enhanced formatting and auto-expanded collapsible sections
+
+### Markdown Enhancements
+
+DumbPad now supports enhanced markdown features:
+
+#### GitHub-Style Alert Blocks
+
+```markdown
+> [!NOTE]
+> This is a note alert block
+
+> [!TIP]
+> This is a tip alert block
+
+> [!IMPORTANT]
+> This is an important alert block
+
+> [!WARNING]
+> This is a warning alert block
+
+> [!CAUTION]
+> This is a caution alert block
+```
+
+#### Extended Table Support
+
+- Advanced table formatting with alignment
+- Enhanced styling for better readability
+
+#### Collapsible Details
+
+```markdown
+<details>
+<summary>Click to expand</summary>
+Content that will be automatically expanded when printing
+</details>
+```
+
+### URL Parameters
+
+- **Direct notepad linking**: `?id=notepadname` - Opens a specific notepad by name (case-insensitive)
+- **Browser navigation**: Use back/forward buttons to navigate between notepads
+- **Shareable URLs**: Copy links to share specific notepads with others
 
 ## Technical Details
 
@@ -239,6 +337,7 @@ See Development Guide for local setup and guidelines.
 Made with ❤️ by DumbWare.io
 
 ## 🌐 Check Us Out
+
 - **Website:** [dumbware.io](https://www.dumbware.io/)
 - **Join the Chaos:** [Discord](https://discord.gg/zJutzxWyq2) 💬
 
@@ -250,6 +349,7 @@ Made with ❤️ by DumbWare.io
 
 ## Future Features
 
-* File attachments
+- File attachments
+- Markdown code syntax highlighting
 
 > Got an idea? Open an issue or submit a PR

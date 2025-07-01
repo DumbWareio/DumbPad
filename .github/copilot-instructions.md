@@ -1,42 +1,7 @@
-/**
- * Cursor rules for maintaining code quality and consistency
- */
-
-{
-  "rules": {
-    "backend-file-header-docs": {
-      "description": "All backend source files must have a header comment explaining their purpose",
-      "pattern": "server.js",
-      "check": {
-        "type": "regex",
-        "value": "^/\\*\\*\\n \\* [^\\n]+\\n \\* [^\\n]+\\n \\* [^\\n]+\\n \\*/\\n",
-        "message": "File must start with a header comment block (3 lines) explaining its purpose"
-      }
-    },
-    "frontend-file-header-docs": {
-      "description": "All frontend source files must have a header comment explaining their purpose",
-      "pattern": "public/**/*.js",
-      "check": {
-        "type": "regex",
-        "value": "^/\\*\\*\\n \\* [^\\n]+\\n \\* [^\\n]+\\n \\* [^\\n]+\\n \\*/\\n",
-        "message": "File must start with a header comment block (3 lines) explaining its purpose"
-      }
-    },
-    "scripts-file-header-docs": {
-      "description": "All script files must have a header comment explaining their purpose",
-      "pattern": "scripts/**/*.js",
-      "check": {
-        "type": "regex",
-        "value": "^/\\*\\*\\n \\* [^\\n]+\\n \\* [^\\n]+\\n \\* [^\\n]+\\n \\*/\\n",
-        "message": "File must start with a header comment block (3 lines) explaining its purpose"
-      }
-    }
-  }
-}
-
 # Project Principles
 
 # Code Philosophy
+
 - Keep code simple, smart, and follow best practices
 - Don't over-engineer for the sake of engineering
 - Use standard conventions and patterns
@@ -47,6 +12,7 @@
 - Overcommented code is better than undercommented code
 
 # Commit Conventions
+
 - Use Conventional Commits format:
   - feat: new features
   - fix: bug fixes
@@ -61,15 +27,18 @@
 # Project Structure
 
 # Root Directory
+
 - Keep root directory clean with only essential files.
 - Contains configuration files (`docker-compose.yml`, `Dockerfile`, `.env.example`, `package.json`, `README.md`, etc.).
 - The main server entry point is `server.js`.
 
 # Backend
+
 - The core backend logic is contained in `server.js`, which handles routing, WebSocket connections, and file operations.
 - The `data/` directory is used for storing text file data.
 
 # Frontend (`public/`)
+
 - All frontend code is located in the `public/` directory.
   - `index.html`: The main application page for the text editor.
   - `login.html`: The PIN-based login page.
@@ -90,24 +59,28 @@
     - `toaster.js`: Manages the display of toast notifications for user feedback.
 
 # Scripts (`scripts/`)
+
 - This directory contains helper scripts for development and build-related tasks.
   - `cors.js`: A simple script to enable CORS, likely for development purposes.
   - `generate-png.js`: A script to generate PNG images from the SVG logo.
   - `pwa-manifest-generator.js`: A script that generates the `manifest.json` file required for PWA functionality.
 
 # Documentation
+
 - Main `README.md` in the root is the primary source of documentation.
 - Code must be self-documenting with clear naming.
 - Complex logic must include comments explaining "why" not "what".
 - JSDoc comments for public functions and APIs.
 
 # Docker Configuration
+
 - `Dockerfile` and `docker-compose.yml` in the root define the containerization setup.
 - `.dockerignore` is configured to exclude unnecessary files from the Docker image.
 - Multi-stage builds are used to keep the final image size small.
 - Use specific version tags for base images.
 
 # Code Style
+
 - Follow ESLint and Prettier configurations
 - Use meaningful variable and function names
 - Keep functions small and focused
@@ -117,6 +90,7 @@
 - Add logging when appropriate and environment variable DEBUG is set to true
 
 # Code Organization and Modularity
+
 - Break complex functionality into separate modules
 - Each module should have a single responsibility
 - Modules should be self-contained with clear interfaces
@@ -126,6 +100,7 @@
 - Group related functionality in the same directory
 
 # Theme and Styling
+
 - Maintain consistent theme colors across the application:
   - Light theme colors:
     - Background: #ffffff
@@ -142,6 +117,7 @@
 - System theme preference should be respected by default
 
 # Security and Authentication
+
 - PIN authentication logic in login.html must not be modified without verification and override from the owner
 - PIN input fields must:
   - Use type="password"

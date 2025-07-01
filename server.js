@@ -30,11 +30,14 @@ let notepads_cache = {
     notepads: [],
     index: null,
 };
+const packageJson = require('./package.json');
+const VERSION = packageJson.version || '1.0.0';
 
 const server = app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
     console.log(`Base URL: ${BASE_URL}`);
     console.log(`Environment: ${NODE_ENV}`);
+    console.log(`Version: ${VERSION}`);
 });
 
 // Trust proxy - required for secure cookies behind a reverse proxy
@@ -51,8 +54,38 @@ app.use(cookieParser());
 app.use('/js/marked', express.static(
     path.join(__dirname, 'node_modules/marked/lib')
 ));
+app.use('/js/marked-extended-tables', express.static(
+    path.join(__dirname, 'node_modules/marked-extended-tables/src')
+));
+app.use('/js/marked-alert', express.static(
+    path.join(__dirname, 'node_modules/marked-alert/dist')
+));
 
 generatePWAManifest(SITE_TITLE);
+
+// Dynamic service worker with correct version (must be before static middleware)
+app.get('/service-worker.js', async (req, res) => {
+    // Set proper MIME type and cache headers to prevent caching
+    res.setHeader('Content-Type', 'application/javascript');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    
+    try {
+        let swContent = await fs.readFile(path.join(PUBLIC_DIR, 'service-worker.js'), 'utf8');
+        
+        // Replace the version initialization with the actual version from package.json
+        swContent = swContent.replace(
+            /let APP_VERSION = ".*?";/,
+            `let APP_VERSION = "${VERSION}";`
+        );
+        
+        res.send(swContent);
+    } catch (error) {
+        console.error('Error reading service-worker.js:', error);
+        res.status(500).send('Error loading service worker');
+    }
+});
 
 app.use(express.static(path.join(__dirname, 'public'), {
     index: false
@@ -307,10 +340,10 @@ app.get('/', originValidationMiddleware, (req, res) => {
 app.get("/asset-manifest.json", (req, res) => {
     // generated in pwa-manifest-generator and fetched from service-worker.js
     res.sendFile(path.join(ASSETS_DIR, "asset-manifest.json"));
-  });
+});
 app.get("/manifest.json", (req, res) => {
     res.sendFile(path.join(ASSETS_DIR, "manifest.json"));
-  });
+});
 
 // Login page route
 app.get('/login', (req, res) => {
@@ -391,6 +424,7 @@ app.get('/api/config', (req, res) => {
     res.json({
         siteTitle: SITE_TITLE,
         baseUrl: process.env.BASE_URL,
+        version: VERSION,
     });
 });
 
@@ -527,6 +561,20 @@ async function indexNotepads() {
     // console.log(notepads_cache); // uncomment to debug
 }
 
+// Helper function to generate unique notepad name
+function generateUniqueName(desiredName, existingNotepads) {
+    let uniqueName = desiredName;
+    let counter = 1;
+    
+    // Check if name already exists
+    while (existingNotepads.some(notepad => notepad.name === uniqueName)) {
+        uniqueName = `${desiredName}-${counter}`;
+        counter++;
+    }
+    
+    return uniqueName;
+}
+
 // Search function using cache
 function searchNotepads(query) {
     if (!notepads_cache.index) indexNotepads();
@@ -609,9 +657,12 @@ app.post('/api/notepads', async (req, res) => {
     try {
         const data = JSON.parse(await fs.readFile(NOTEPADS_FILE, 'utf8'));
         const id = Date.now().toString();
+        const desiredName = `Notepad ${data.notepads.length + 1}`;
+        const uniqueName = generateUniqueName(desiredName, data.notepads);
+        
         const newNotepad = {
             id,
-            name: `Notepad ${data.notepads.length + 1}`
+            name: uniqueName
         };
         data.notepads.push(newNotepad);
 
@@ -642,10 +693,15 @@ app.put('/api/notepads/:id', async (req, res) => {
         if (!notepad) {
             return res.status(404).json({ error: 'Notepad not found' });
         }
-        notepad.name = name;
+        
+        // Generate unique name (excluding current notepad from check)
+        const otherNotepads = data.notepads.filter(n => n.id !== id);
+        const uniqueName = generateUniqueName(name, otherNotepads);
+        
+        notepad.name = uniqueName;
         await fs.writeFile(NOTEPADS_FILE, JSON.stringify(data));
         indexNotepads(); // update searching index
-        res.json(notepad);
+        res.json({ ...notepad, nameChanged: uniqueName !== name });
     } catch (err) {
         res.status(500).json({ error: 'Error renaming notepad' });
     }

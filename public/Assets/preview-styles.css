@@ -1,0 +1,323 @@
+/* Markdown styles for DumbPad */
+/* Preview pane markdown styles */
+.preview-container {
+  overflow: auto;
+}
+#preview-pane {
+  /* white-space: pre-wrap; */
+  font-family: sans-serif;
+}
+
+/* Image sizing in markdown preview */
+#preview-pane img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+}
+
+/* Link styling in markdown preview */
+#preview-pane a {
+  color: var(--primary-color);
+  text-decoration: underline;
+}
+
+#preview-pane a:hover {
+  color: var(--primary-color);
+  opacity: 0.7;
+}
+
+code {
+  background-color: var(--code-markdown);
+  padding: 2px 4px;
+  border-radius: 5px;
+  margin: 1.5rem 0;
+}
+
+/* Code block styling */
+#preview-pane pre {
+  background-color: var(--code-markdown);
+  border-radius: 8px;
+  padding: 0.5rem 3rem 0.5rem 1rem;
+  overflow-x: hidden;
+  width: fit-content;
+  max-width: 100%;
+  box-sizing: border-box;
+  position: relative;
+  margin: 1.5rem 0;
+}
+
+/* Copy button for code blocks */
+#preview-pane pre .copy-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background-color: var(--secondary-color);
+  border: 1px solid var(--text-color);
+  border-radius: 4px;
+  padding: 4px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-color);
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s, background-color 0.2s;
+  z-index: 10;
+}
+
+#preview-pane pre .copy-button:hover {
+  opacity: 1;
+  background-color: var(--primary-color);
+  color: white;
+}
+
+#preview-pane pre .copy-button:active {
+  transform: scale(0.95);
+}
+
+#preview-pane pre code {
+  background-color: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-family: "Consolas", "Monaco", "Courier New", monospace;
+  font-size: 0.9em;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  max-width: 100%;
+  word-break: break-word;
+}
+
+/* Reduce spacing below headers */
+#preview-pane h1,
+#preview-pane h2,
+#preview-pane h3,
+#preview-pane h4,
+#preview-pane h5,
+#preview-pane h6 {
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+  line-height: 1;
+}
+
+/* First header has no top margin */
+#preview-pane h1:first-child,
+#preview-pane h2:first-child,
+#preview-pane h3:first-child,
+#preview-pane h4:first-child,
+#preview-pane h5:first-child,
+#preview-pane h6:first-child {
+  margin-top: 0;
+}
+
+/* Markdown checkbox styling in preview pane */
+#preview-pane input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  background-color: var(--textarea-bg);
+  border: 2px solid var(--secondary-color);
+  border-radius: 3px;
+  position: relative;
+  cursor: not-allowed;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+#preview-pane input[type="checkbox"]:checked {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+#preview-pane input[type="checkbox"]:checked:after {
+  content: "✔";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+/* Support for browsers that don't support :has() */
+#preview-pane ul li input[type="checkbox"] {
+  margin-left: -20px;
+}
+#preview-pane ul li:has(input[type="checkbox"]) {
+  list-style: none;
+}
+/* Fallback for older browsers */
+#preview-pane ul {
+  padding-left: 20px;
+}
+#preview-pane ul li {
+  list-style: disc;
+}
+#preview-pane ul li input[type="checkbox"] + * {
+  margin-left: 4px;
+}
+/* Reduce spacing between list items */
+#preview-pane ul li,
+#preview-pane ol li {
+  margin: 0;
+  padding: 0;
+  line-height: 1.4em;
+}
+#preview-pane ul,
+#preview-pane ol {
+  padding-left: 20px;
+}
+
+/* Table styling for markdown preview */
+#preview-pane table {
+  /* border-collapse: collapse; */
+  border-spacing: 0;
+  max-width: 100%;
+  margin: 1.5rem 0;
+  font-size: 0.9em;
+  background-color: var(--textarea-bg);
+  border: 1px solid var(--secondary-color);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+#preview-pane table th,
+#preview-pane table td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--secondary-color);
+  border-right: 1px solid var(--secondary-color);
+  vertical-align: top;
+}
+
+#preview-pane table th:last-child,
+#preview-pane table td:last-child {
+  border-right: none;
+}
+#preview-pane table tr:last-child td {
+  border-bottom: none;
+}
+
+#preview-pane table th {
+  background-color: var(--secondary-color);
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+#preview-pane table tbody tr:hover {
+  background-color: rgba(var(--primary-color), 0.05);
+}
+
+/* Table alignment classes for extended tables */
+#preview-pane table th[align="left"],
+#preview-pane table td[align="left"] {
+  text-align: left;
+}
+
+#preview-pane table th[align="center"],
+#preview-pane table td[align="center"] {
+  text-align: center;
+}
+
+#preview-pane table th[align="right"],
+#preview-pane table td[align="right"] {
+  text-align: right;
+}
+
+/* GitHub-style Alert/Callout styling */
+#preview-pane .markdown-alert {
+  padding: 0.5rem;
+  margin: 1.5rem 0;
+  color: inherit;
+  border-left: 4px solid var(--secondary-color);
+  border-radius: 6px;
+  background-color: rgba(var(--secondary-color), 0.1);
+}
+
+#preview-pane .markdown-alert-title {
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  font-size: 0.9em;
+}
+
+#preview-pane .markdown-alert-title svg {
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+
+#preview-pane .markdown-alert p:last-child {
+  margin-bottom: 0.5rem;
+}
+
+/* Alert type-specific colors */
+#preview-pane .markdown-alert-note {
+  border-left-color: #0969da;
+  background-color: rgba(9, 105, 218, 0.1);
+  padding-left: 1rem;
+}
+#preview-pane .markdown-alert-note .markdown-alert-title {
+  color: #0969da;
+}
+#preview-pane .markdown-alert-note .markdown-alert-title svg {
+  fill: #0969da;
+}
+
+#preview-pane .markdown-alert-tip {
+  border-left-color: #1f883d;
+  background-color: rgba(31, 136, 61, 0.1);
+  padding-left: 1rem;
+}
+#preview-pane .markdown-alert-tip .markdown-alert-title {
+  color: #1f883d;
+}
+#preview-pane .markdown-alert-tip .markdown-alert-title svg {
+  fill: #1f883d;
+}
+
+#preview-pane .markdown-alert-important {
+  border-left-color: #8250df;
+  background-color: rgba(130, 80, 223, 0.1);
+  padding-left: 1rem;
+}
+#preview-pane .markdown-alert-important .markdown-alert-title {
+  color: #8250df;
+}
+#preview-pane .markdown-alert-important .markdown-alert-title svg {
+  fill: #8250df;
+}
+
+#preview-pane .markdown-alert-warning {
+  border-left-color: #9e6a02;
+  background-color: rgba(158, 106, 2, 0.1);
+  padding-left: 1rem;
+}
+#preview-pane .markdown-alert-warning .markdown-alert-title {
+  color: #9e6a02;
+}
+#preview-pane .markdown-alert-warning .markdown-alert-title svg {
+  fill: #9e6a02;
+}
+
+#preview-pane .markdown-alert-caution {
+  border-left-color: #d1242f;
+  background-color: rgba(209, 36, 47, 0.1);
+  padding-left: 1rem;
+}
+#preview-pane .markdown-alert-caution .markdown-alert-title {
+  color: #d1242f;
+}
+#preview-pane .markdown-alert-caution .markdown-alert-title svg {
+  fill: #d1242f;
+}
+
+#preview-pane details {
+  background-color: var(--textarea-bg);
+  border: 1.5px solid var(--secondary-color);
+  border-radius: 6px;
+  padding: 0.5rem;
+  margin: 1.5rem 0;
+  max-width: 100%;
+}
