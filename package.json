@@ -14,9 +14,11 @@
     "dotenv": "^16.4.1",
     "express": "^5.1.0",
     "fuse.js": "^7.1.0",
+    "highlight.js": "^11.11.1",
     "marked": "^15.0.11",
     "marked-alert": "^2.1.2",
     "marked-extended-tables": "^2.0.1",
+    "marked-highlight": "^2.2.2",
     "ws": "^8.18.2"
   },
   "devDependencies": {
