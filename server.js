@@ -61,10 +61,13 @@ app.use('/js/marked-alert', express.static(
     path.join(__dirname, 'node_modules/marked-alert/dist')
 ));
 app.use('/js/marked-highlight', express.static(
-    path.join(__dirname, 'node_modules/marked-highlight/lib')
+    path.join(__dirname, 'node_modules/marked-highlight/src')
 ));
 app.use('/js/highlight.js', express.static(
     path.join(__dirname, 'node_modules/highlight.js')
+));
+app.use('/css/highlight.js', express.static(
+    path.join(__dirname, 'node_modules/highlight.js/styles')
 ));
 
 generatePWAManifest(SITE_TITLE);
