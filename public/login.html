@@ -164,6 +164,58 @@
                 });
             };
 
+            // Validate redirect URL for security
+            const isValidRedirectUrl = (url) => {
+                if (!url || typeof url !== 'string') {
+                    return false;
+                }
+                
+                // Must start with "/" (relative path)
+                if (!url.startsWith('/')) {
+                    return false;
+                }
+                
+                // Must not start with "//" (protocol-relative URL)
+                if (url.startsWith('//')) {
+                    return false;
+                }
+                
+                // Must not contain backslashes
+                if (url.includes('\\')) {
+                    return false;
+                }
+                
+                return true;
+            };
+
+            // Get redirect URL with preserved query parameters
+            const getRedirectUrl = () => {
+                const urlParams = new URLSearchParams(window.location.search);
+                const redirectParam = urlParams.get('redirect');
+                
+                if (redirectParam) {
+                    // Use the redirect parameter if it exists and is valid
+                    const decodedRedirect = decodeURIComponent(redirectParam);
+                    if (isValidRedirectUrl(decodedRedirect)) {
+                        return decodedRedirect;
+                    } else {
+                        console.warn('Invalid redirect parameter blocked:', redirectParam);
+                        // Fall through to check current params
+                    }
+                }
+                
+                // Check if there are any query parameters to preserve
+                const currentParams = window.location.search;
+                if (currentParams && !currentParams.includes('redirect=')) {
+                    const potentialUrl = `/${currentParams}`;
+                    if (isValidRedirectUrl(potentialUrl)) {
+                        return potentialUrl;
+                    }
+                }
+                
+                return '/';
+            };
+
             // Initialize
             const initialize = async () => {
                 try {
@@ -195,7 +247,7 @@
                         createPinInputs(length);
                         pinDigits[0].focus();
                     } else {
-                        window.location.href = `/`;
+                        window.location.href = getRedirectUrl();
                     }
                 } catch (err) {
                     console.error('Error checking PIN requirement:', err);
@@ -217,7 +269,7 @@
                     const data = await response.json();
                     if (data.success) {
                         pinError.textContent = '';
-                        window.location.href = `/`;
+                        window.location.href = getRedirectUrl();
                     } else {
                         if (response.status === 429) {
                             pinError.textContent = data.error;
