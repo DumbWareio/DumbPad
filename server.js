@@ -330,7 +330,10 @@ app.get('/', originValidationMiddleware, (req, res) => {
     // Check PIN cookie
     const authCookie = req.cookies[COOKIE_NAME];
     if (!authCookie || !secureCompare(authCookie, pin)) {
-        return res.redirect('/login');
+        // Preserve the original URL with query parameters
+        const originalUrl = req.originalUrl;
+        const redirectParam = encodeURIComponent(originalUrl);
+        return res.redirect(`/login?redirect=${redirectParam}`);
     }
 
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -345,11 +348,51 @@ app.get("/manifest.json", (req, res) => {
     res.sendFile(path.join(ASSETS_DIR, "manifest.json"));
 });
 
+// Helper function to validate redirect URLs for security
+function isValidRedirectUrl(url) {
+    if (!url || typeof url !== 'string') {
+        return false;
+    }
+    
+    // Must start with "/" (relative path)
+    if (!url.startsWith('/')) {
+        return false;
+    }
+    
+    // Must not start with "//" (protocol-relative URL that could redirect externally)
+    if (url.startsWith('//')) {
+        return false;
+    }
+    
+    // Must not contain backslashes (could be used for bypasses)
+    if (url.includes('\\')) {
+        return false;
+    }
+    
+    // Must not contain encoded characters that could be used for bypasses
+    if (url.includes('%2f') || url.includes('%2F') || url.includes('%5c') || url.includes('%5C')) {
+        return false;
+    }
+    
+    return true;
+}
+
 // Login page route
 app.get('/login', (req, res) => {
     // If no PIN is required or user is already authenticated, redirect to main app
     const pin = process.env.DUMBPAD_PIN;
     if (!pin || !isValidPin(pin) || (req.cookies[COOKIE_NAME] && secureCompare(req.cookies[COOKIE_NAME], pin))) {
+        // If user is already authenticated, redirect to the original URL if provided
+        const redirectParam = req.query.redirect;
+        if (redirectParam) {
+            const decodedRedirect = decodeURIComponent(redirectParam);
+            if (isValidRedirectUrl(decodedRedirect)) {
+                return res.redirect(decodedRedirect);
+            } else {
+                console.warn('Invalid redirect parameter blocked:', redirectParam);
+                return res.redirect('/');
+            }
+        }
         return res.redirect('/');
     }
     
