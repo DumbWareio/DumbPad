@@ -9,7 +9,7 @@ import ConfirmationManager from './managers/confirmation.js';
 import { marked } from '/js/marked/marked.esm.js';
 import markedExtendedTables from '/js/marked-extended-tables/index.js';
 import markedAlert from '/js/marked-alert/index.js';
-import * as markedHighlight from '/js/marked-highlight/index.umd.js';
+// import * as markedHighlight from '/js/marked-highlight/index.umd.js';
 // import { HighlightJS as hljs } from '/js/highlight.js/es/common.js';
 
 
@@ -1268,18 +1268,18 @@ document.addEventListener('DOMContentLoaded', () => {
     function initializeMarkDown() {
         marked.use(markedExtendedTables()); // Use marked-extended-tables for table support
         marked.use(markedAlert()); // Use marked-alert for alert blocks
-        marked.use(markedHighlight({
-            emptyLangClass: 'hljs',
-            langPrefix: 'hljs language-',
-            highlight(code, lang, info) {
-              const language = hljs.getLanguage(lang) ? lang : 'plaintext';
-              return hljs.highlight(code, { language }).value;
-            }
-          })); 
-        marked.setOptions({ // Set up markdown parser
-            breaks: true,
-            gfm: true
-        });
+        // marked.use(markedHighlight({
+        //     emptyLangClass: 'hljs',
+        //     langPrefix: 'hljs language-',
+        //     highlight(code, lang, info) {
+        //       const language = hljs.getLanguage(lang) ? lang : 'plaintext';
+        //       return hljs.highlight(code, { language }).value;
+        //     }
+        //   })); 
+        // marked.setOptions({ // Set up markdown parser
+        //     breaks: true,
+        //     gfm: true
+        // });
     }
 
     const searchManager = new SearchManager(fetchWithPin, selectNotepad, closeAllModals);
