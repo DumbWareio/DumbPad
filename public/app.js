@@ -9,9 +9,8 @@ import ConfirmationManager from './managers/confirmation.js';
 import { marked } from '/js/marked/marked.esm.js';
 import markedExtendedTables from '/js/marked-extended-tables/index.js';
 import markedAlert from '/js/marked-alert/index.js';
-// import * as markedHighlight from '/js/marked-highlight/index.umd.js';
-// import { HighlightJS as hljs } from '/js/highlight.js/es/common.js';
-
+import { markedHighlight } from '/js/marked-highlight/index.js';
+import hljs from '/js/highlightjs/highlight.min.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     const DEBUG = false;
@@ -380,16 +379,20 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Function to render markdown preview
+    function renderMarkdownPreview(content) {
+        previewPane.innerHTML = marked.parse(content);
+        addCopyButtonsToCodeBlocks();
+    }
+
     // Function to toggle between edit and preview modes
     function toggleMarkdownPreview(toggle, enable, enableStatusMessage = true) {
         if (toggle) isPreviewMode = !isPreviewMode;
         else isPreviewMode = enable;
-         
+        
         if (isPreviewMode) {
-            // Render and show the markdown
             inheritEditorStyles(previewPane);
-            previewPane.innerHTML = marked.parse(editor.value);
-            addCopyButtonsToCodeBlocks(); // Add copy buttons after rendering
+            renderMarkdownPreview(editor.value);
             previewContainer.style.display = 'block';
             editorContainer.style.display = 'none';
             previewMarkdownBtn.classList.add('active');
@@ -401,7 +404,6 @@ document.addEventListener('DOMContentLoaded', () => {
             editor.focus();
             if (enableStatusMessage) toaster.show('Markdown Preview Off', 'error');
         }
-
         collaborationManager.updateLocalCursor();
     }
 
@@ -687,6 +689,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Load main and preview styles for print
         let mainStyles = '';
         let previewStyles = '';
+        let highlightStyles = '';
         let printStyles = '';
         try {
             const [mainResponse, previewResponse] = await Promise.all([
@@ -697,6 +700,17 @@ document.addEventListener('DOMContentLoaded', () => {
             previewStyles = await previewResponse.text();
         } catch (error) {
             console.warn('Could not load styles for print:', error);
+        }
+        
+        // Get the current highlight.js theme CSS
+        try {
+            const highlightThemeLink = document.querySelector('link[data-highlight-theme]');
+            if (highlightThemeLink) {
+                const highlightResponse = await fetch(highlightThemeLink.href);
+                highlightStyles = await highlightResponse.text();
+            }
+        } catch (error) {
+            console.warn('Could not load highlight.js theme for print:', error);
         }
         
         // Create print-specific styles by wrapping preview styles in @media print
@@ -742,6 +756,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 /* Inject all preview styles into print media */
                 ${previewStyles}
+                /* Ensure highlight.js styles are applied */
+                
             }
         `;
         
@@ -756,6 +772,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     
                     /* Preview styles */
                     ${previewStyles}
+                    
+                    /* Highlight.js theme styles */
+                    ${highlightStyles}
                     
                     /* Dynamic print styles with injected preview styles */
                     ${printStyles}
@@ -1048,6 +1067,7 @@ document.addEventListener('DOMContentLoaded', () => {
         themeToggle.addEventListener('click', () => {
             currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
             document.documentElement.setAttribute('data-theme', currentTheme);
+            updateHighlightTheme(currentTheme);
             inheritEditorStyles(previewPane);
             storageManager.save(THEME_KEY, currentTheme);
         });
@@ -1265,21 +1285,72 @@ document.addEventListener('DOMContentLoaded', () => {
         toggleMarkdownPreview(false, currentSettings.defaultMarkdownPreview, false);
     };
 
-    function initializeMarkDown() {
-        marked.use(markedExtendedTables()); // Use marked-extended-tables for table support
-        marked.use(markedAlert()); // Use marked-alert for alert blocks
-        // marked.use(markedHighlight({
-        //     emptyLangClass: 'hljs',
-        //     langPrefix: 'hljs language-',
-        //     highlight(code, lang, info) {
-        //       const language = hljs.getLanguage(lang) ? lang : 'plaintext';
-        //       return hljs.highlight(code, { language }).value;
-        //     }
-        //   })); 
-        // marked.setOptions({ // Set up markdown parser
-        //     breaks: true,
-        //     gfm: true
-        // });
+    async function initializeMarkdown() {
+        // Register all languages dynamically
+        const allLanguages = [
+            "1c", "abnf", "accesslog", "actionscript", "ada", "angelscript", "apache", "applescript", "arcade", "arduino",
+            "armasm", "asciidoc", "aspectj", "autohotkey", "autoit", "avrasm", "awk", "axapta", "bash", "basic", "bnf",
+            "brainfuck", "c", "cal", "capnproto", "ceylon", "clean", "clojure-repl", "clojure", "cmake", "coffeescript",
+            "coq", "cos", "cpp", "crmsh", "crystal", "csharp", "csp", "css", "d", "dart", "delphi", "diff", "django",
+            "dns", "dockerfile", "dos", "dsconfig", "dts", "dust", "ebnf", "elixir", "elm", "erb", "erlang-repl", "erlang",
+            "excel", "fix", "flix", "fortran", "fsharp", "gams", "gauss", "gcode", "gherkin", "glsl", "gml", "go", "golo",
+            "gradle", "graphql", "groovy", "haml", "handlebars", "haskell", "haxe", "hsp", "http", "hy", "inform7", "ini",
+            "irpf90", "isbl", "java", "javascript", "jboss-cli", "json", "julia-repl", "julia", "kotlin", "lasso", "latex",
+            "ldif", "leaf", "less", "lisp", "livecodeserver", "livescript", "llvm", "lsl", "lua", "makefile", "markdown",
+            "mathematica", "matlab", "maxima", "mel", "mercury", "mipsasm", "mizar", "mojolicious", "monkey", "moonscript",
+            "n1ql", "nestedtext", "nginx", "nim", "nix", "node-repl", "nsis", "objectivec", "ocaml", "openscad", "oxygene",
+            "parser3", "perl", "pf", "pgsql", "php-template", "php", "plaintext", "pony", "powershell", "processing", "profile",
+            "prolog", "properties", "protobuf", "puppet", "purebasic", "python-repl", "python", "q", "qml", "r", "reasonml",
+            "rib", "roboconf", "routeros", "rsl", "ruby", "ruleslanguage", "rust", "sas", "scala", "scheme", "scilab", "scss",
+            "shell", "smali", "smalltalk", "sml", "sqf", "sql", "stan", "stata", "step21", "stylus", "subunit", "swift",
+            "taggerscript", "tap", "tcl", "thrift", "tp", "twig", "typescript", "vala", "vbnet", "vbscript-html", "vbscript",
+            "verilog", "vhdl", "vim", "wasm", "wren", "x86asm", "xl", "xml", "xquery", "yaml", "zephir"
+        ];
+        for (const lang of allLanguages) {
+            
+            const module = await import(`/js/highlightjs/languages/${lang}.min.js`);
+            hljs.registerLanguage(lang, module.default);
+            // Aliases
+            if (lang === 'xml') hljs.registerLanguage('html', module.default);
+        }
+
+        marked.use(markedExtendedTables());
+        marked.use(markedAlert());
+        marked.use(markedHighlight({
+            langPrefix: 'hljs language-',
+            highlight(code, lang) {
+                const language = hljs.getLanguage(lang) ? lang : 'plaintext';
+                return hljs.highlight(code, { language }).value;
+            }
+        }));
+        marked.setOptions({
+            breaks: true,
+            gfm: true
+        });
+        
+        // Set initial highlight theme based on current theme
+        updateHighlightTheme(currentTheme);
+    }
+
+    // Function to update highlight.js theme based on current app theme
+    function updateHighlightTheme(theme) {
+        // Remove any existing highlight.js theme
+        const existingTheme = document.querySelector('link[data-highlight-theme]');
+        if (existingTheme) {
+            existingTheme.remove();
+        }
+        
+        // Determine which theme CSS to load
+        const themeCss = theme === 'dark' 
+            ? '/css/highlightjs/github-dark.min.css'
+            : '/css/highlightjs/github.min.css';
+        
+        // Create and append new theme link
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = themeCss;
+        link.setAttribute('data-highlight-theme', theme);
+        document.head.appendChild(link);
     }
 
     const searchManager = new SearchManager(fetchWithPin, selectNotepad, closeAllModals);
@@ -1287,7 +1358,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize the app
     const initializeApp = async () => {
         await registerServiceWorker();
-        initializeMarkDown();
+        await initializeMarkdown();
         setupToolTips();
         addEventListeners();
 
@@ -1322,7 +1393,6 @@ document.addEventListener('DOMContentLoaded', () => {
         appSettings = settingsManager.loadSettings();
         applySettings(appSettings);
     };
-
 
     // Start the app
     initializeApp();

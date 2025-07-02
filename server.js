@@ -63,12 +63,19 @@ app.use('/js/marked-alert', express.static(
 app.use('/js/marked-highlight', express.static(
     path.join(__dirname, 'node_modules/marked-highlight/src')
 ));
-app.use('/js/highlight.js', express.static(
-    path.join(__dirname, 'node_modules/highlight.js')
+app.use('/js/highlightjs', express.static(
+    path.join(__dirname, 'node_modules/@highlightjs/cdn-assets/es')
 ));
-app.use('/css/highlight.js', express.static(
-    path.join(__dirname, 'node_modules/highlight.js/styles')
+// app.use('/css/highlightjs/github-dark.min.css', express.static(
+//     path.join(__dirname, 'node_modules/@highlightjs/cdn-assets/styles/github-dark.min.css')
+// ));
+// app.use('/css/highlightjs/github.min.css', express.static(
+//     path.join(__dirname, 'node_modules/@highlightjs/cdn-assets/styles/github.min.css')
+// ));
+app.use('/css/highlightjs', express.static(
+    path.join(__dirname, 'node_modules/@highlightjs/cdn-assets/styles')
 ));
+
 
 generatePWAManifest(SITE_TITLE);
 

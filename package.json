@@ -9,12 +9,12 @@
     "generate-icons": "node scripts/generate-png.js"
   },
   "dependencies": {
+    "@highlightjs/cdn-assets": "^11.11.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.1",
     "express": "^5.1.0",
     "fuse.js": "^7.1.0",
-    "highlight.js": "^11.11.1",
     "marked": "^15.0.11",
     "marked-alert": "^2.1.2",
     "marked-extended-tables": "^2.0.1",
