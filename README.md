@@ -318,12 +318,12 @@ Content that will be automatically expanded when printing
 ```
 
 #### Code Syntax Highlighting
-```markdown
+
+````markdown
 ```javascript
 console.log("Hello, world!");
 ```
-```markdown
-
+````
 
 ### URL Parameters
 
@@ -375,3 +375,7 @@ Made with ❤️ by DumbWare.io
 - Markdown code syntax highlighting
 
 > Got an idea? Open an issue or submit a PR
+
+```
+
+```
