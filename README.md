@@ -317,6 +317,14 @@ Content that will be automatically expanded when printing
 </details>
 ```
 
+#### Code Syntax Highlighting
+```markdown
+```javascript
+console.log("Hello, world!");
+```
+```markdown
+
+
 ### URL Parameters
 
 - **Direct notepad linking**: `?id=notepadname` - Opens a specific notepad by name (case-insensitive)
