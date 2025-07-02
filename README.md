@@ -44,6 +44,7 @@ A stupid simple, no auth (unless you want it!), modern notepad application with 
   - GitHub-style alert blocks (Note, Tip, Important, Warning, Caution)
   - Extended table formatting
   - Auto-expand collapsible details in print (configurable)
+  - Code syntax highlighting in `fenced codeblocks`
 - Direct notepad linking with URL parameters
 - Copy shareable notepad links
 - Browser navigation support (back/forward buttons)
@@ -246,6 +247,8 @@ Access settings via the gear icon (⚙️) in the header or use keyboard shortcu
 - marked: Markdown formatting
 - marked-alert: GitHub-style alert blocks for markdown
 - marked-extended-tables: Enhanced table support for markdown
+- marked-highlight: Syntax highlighting for code blocks in markdown
+- @highlightjs/cdn-assets: Highlight.js assets for code syntax highlighting
 - fuse.js: Fuzzy searching
 - ws: WebSocket support for real-time collaboration
 
