@@ -12,7 +12,7 @@ import markedAlert from '/js/marked-alert/index.js';
 import { markedHighlight } from '/js/marked-highlight/index.js';
 import hljs from '/js/@highlightjs/highlight.min.js';
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     const DEBUG = false;
     let isPreviewMode = false;
     const THEME_KEY = 'dumbpad_theme';
@@ -1310,18 +1310,32 @@ document.addEventListener('DOMContentLoaded', () => {
         // Set initial highlight theme based on current theme
         updateHighlightTheme(currentTheme);
 
-        // Register languages dynamically
+        // Register languages dynamically in parallel
         if (highlightLanguages.length > 0) { 
             try {
-                for (const lang of highlightLanguages) {
+                // Create array of import promises for parallel loading
+                const importPromises = highlightLanguages.map(async (lang) => {
                     const langAlias = lang === 'html' ? 'xml' : lang; // Use 'xml' for HTML syntax highlighting
-                    const module = await import(`/js/@highlightjs/languages/${langAlias}.min.js`);
-                    if (!module || !module.default) {
+                    try {
+                        const module = await import(`/js/@highlightjs/languages/${langAlias}.min.js`);
+                        if (module && module.default) {
+                            return { lang, module: module.default };
+                        }
+                    } catch (e) {
                         console.warn(`Language module for ${langAlias} not found or invalid`);
-                        continue;
                     }
-                    hljs.registerLanguage(lang, module.default);
-                    // console.log(`Registered highlight.js language: ${lang}`);
+                    return null;
+                });
+
+                // Wait for all imports to complete in parallel
+                const results = await Promise.all(importPromises);
+
+                // Register each successfully imported language
+                for (const result of results) {
+                    if (result) {
+                        hljs.registerLanguage(result.lang, result.module);
+                        // console.log(`Registered highlight.js language: ${result.lang}`);
+                    }
                 }
             }
             catch (error) {
@@ -1353,14 +1367,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initialize the app
     const initializeApp = async () => {
-        await registerServiceWorker();
-        // await initializeMarkdown();
         setupToolTips();
         addEventListeners();
+        appSettings = settingsManager.loadSettings();
 
         fetch(`/api/config`)
             .then(response => response.json())
-            .then(config => {
+            .then(config => { // Load config and intialize markdown functionality
                 if (config.error) throw new Error(config.error);
 
                 document.getElementById('page-title').textContent = `${config.siteTitle} - Simple Notes`;
@@ -1368,32 +1381,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 initializeMarkdown(config.highlightLanguages || [])
                     .catch(error => console.warn(error))
-                    .finally(() => {
-                        // Load notepads after markdown is initialized
-                        loadNotepads().then(() => {
-                            loadNotes(currentNotepadId).then(() => {
-                                // Update URL with current notepad name if no query param was present
-                                const urlParams = new URLSearchParams(window.location.search);
-                                if (!urlParams.has('id') && currentNotepads.length > 0) {
-                                    const currentNotepad = currentNotepads.find(np => np.id === currentNotepadId);
-                                    if (currentNotepad) {
-                                        updateUrlWithNotepad(currentNotepad.name);
-                                    }
-                                }
-                            });
-                            // Mark initial load as complete after first load
-                            isInitialLoad = false;
-                        });
-                    });
-
+            })
+            .then(async () => { // Load notepads after config and markdown is initialized
+                await loadNotepads();
+                await loadNotes(currentNotepadId);
+                const urlParams = new URLSearchParams(window.location.search);
+                if (!urlParams.has('id') && currentNotepads.length > 0) {
+                    const currentNotepad = currentNotepads.find(np => np.id === currentNotepadId);
+                    if (currentNotepad) updateUrlWithNotepad(currentNotepad.name);
+                }
+            })
+            .finally(() => {
+                isInitialLoad = false;
             })
             .catch(err => {
                 console.error('Error loading site configuration:', err);
                 toaster.show(err, "error", true);
             });
         
-        appSettings = settingsManager.loadSettings();
         applySettings(appSettings);
+        await registerServiceWorker();
     };
 
     // Start the app

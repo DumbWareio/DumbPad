@@ -279,7 +279,7 @@ end.
 ```
 
 ```diff
-- "Привет, мир!"
+- "hello from lang!"
 + "Hello from diff"
 ```
 
