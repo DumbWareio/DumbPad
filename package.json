@@ -1,6 +1,6 @@
 {
   "name": "dumbpad",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A simple notepad application",
   "main": "server.js",
   "scripts": {
@@ -9,6 +9,7 @@
     "generate-icons": "node scripts/generate-png.js"
   },
   "dependencies": {
+    "@highlightjs/cdn-assets": "^11.11.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.1",
@@ -17,6 +18,7 @@
     "marked": "^15.0.11",
     "marked-alert": "^2.1.2",
     "marked-extended-tables": "^2.0.1",
+    "marked-highlight": "^2.2.2",
     "ws": "^8.18.2"
   },
   "devDependencies": {

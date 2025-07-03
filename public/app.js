@@ -9,6 +9,8 @@ import ConfirmationManager from './managers/confirmation.js';
 import { marked } from '/js/marked/marked.esm.js';
 import markedExtendedTables from '/js/marked-extended-tables/index.js';
 import markedAlert from '/js/marked-alert/index.js';
+import { markedHighlight } from '/js/marked-highlight/index.js';
+import hljs from '/js/@highlightjs/highlight.min.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     const DEBUG = false;
@@ -377,16 +379,20 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Function to render markdown preview
+    function renderMarkdownPreview(content) {
+        previewPane.innerHTML = marked.parse(content);
+        addCopyButtonsToCodeBlocks();
+    }
+
     // Function to toggle between edit and preview modes
     function toggleMarkdownPreview(toggle, enable, enableStatusMessage = true) {
         if (toggle) isPreviewMode = !isPreviewMode;
         else isPreviewMode = enable;
-         
+        
         if (isPreviewMode) {
-            // Render and show the markdown
             inheritEditorStyles(previewPane);
-            previewPane.innerHTML = marked.parse(editor.value);
-            addCopyButtonsToCodeBlocks(); // Add copy buttons after rendering
+            renderMarkdownPreview(editor.value);
             previewContainer.style.display = 'block';
             editorContainer.style.display = 'none';
             previewMarkdownBtn.classList.add('active');
@@ -398,7 +404,6 @@ document.addEventListener('DOMContentLoaded', () => {
             editor.focus();
             if (enableStatusMessage) toaster.show('Markdown Preview Off', 'error');
         }
-
         collaborationManager.updateLocalCursor();
     }
 
@@ -684,6 +689,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Load main and preview styles for print
         let mainStyles = '';
         let previewStyles = '';
+        let highlightStyles = '';
         let printStyles = '';
         try {
             const [mainResponse, previewResponse] = await Promise.all([
@@ -694,6 +700,17 @@ document.addEventListener('DOMContentLoaded', () => {
             previewStyles = await previewResponse.text();
         } catch (error) {
             console.warn('Could not load styles for print:', error);
+        }
+        
+        // Get the current highlight.js theme CSS
+        try {
+            const highlightThemeLink = document.querySelector('link[data-highlight-theme]');
+            if (highlightThemeLink) {
+                const highlightResponse = await fetch(highlightThemeLink.href);
+                highlightStyles = await highlightResponse.text();
+            }
+        } catch (error) {
+            console.warn('Could not load highlight.js theme for print:', error);
         }
         
         // Create print-specific styles by wrapping preview styles in @media print
@@ -739,6 +756,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 /* Inject all preview styles into print media */
                 ${previewStyles}
+                /* Ensure highlight.js styles are applied */
+                
             }
         `;
         
@@ -753,6 +772,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     
                     /* Preview styles */
                     ${previewStyles}
+                    
+                    /* Highlight.js theme styles */
+                    ${highlightStyles}
                     
                     /* Dynamic print styles with injected preview styles */
                     ${printStyles}
@@ -1045,6 +1067,7 @@ document.addEventListener('DOMContentLoaded', () => {
         themeToggle.addEventListener('click', () => {
             currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
             document.documentElement.setAttribute('data-theme', currentTheme);
+            updateHighlightTheme(currentTheme);
             inheritEditorStyles(previewPane);
             storageManager.save(THEME_KEY, currentTheme);
         });
@@ -1262,11 +1285,65 @@ document.addEventListener('DOMContentLoaded', () => {
         toggleMarkdownPreview(false, currentSettings.defaultMarkdownPreview, false);
     };
 
-    function initializeMarkDown() {
-        // Configure marked with extended tables support
-        marked.use(markedExtendedTables()); // Use marked-extended-tables for table support
-        marked.use(markedAlert()); // Use marked-alert for alert blocks
-        marked.setOptions({ // Set up markdown parser
+    // Function to update highlight.js theme based on current app theme
+    function updateHighlightTheme(theme) {
+        // Remove any existing highlight.js theme
+        const existingTheme = document.querySelector('link[data-highlight-theme]');
+        if (existingTheme) {
+            existingTheme.remove();
+        }
+        
+        // Determine which theme CSS to load
+        const themeCss = theme === 'dark' 
+            ? '/css/@highlightjs/github-dark.min.css'
+            : '/css/@highlightjs/github.min.css';
+        
+        // Create and append new theme link
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = themeCss;
+        link.setAttribute('data-highlight-theme', theme);
+        document.head.appendChild(link);
+    }
+
+    async function initializeMarkdown(highlightLanguages = []) {
+        // Set initial highlight theme based on current theme
+        updateHighlightTheme(currentTheme);
+
+        // Register languages dynamically
+        if (highlightLanguages.length > 0) { 
+            try {
+                for (const lang of highlightLanguages) {
+                    const langAlias = lang === 'html' ? 'xml' : lang; // Use 'xml' for HTML syntax highlighting
+                    const module = await import(`/js/@highlightjs/languages/${langAlias}.min.js`);
+                    if (!module || !module.default) {
+                        console.warn(`Language module for ${langAlias} not found or invalid`);
+                        continue;
+                    }
+                    hljs.registerLanguage(lang, module.default);
+                    // console.log(`Registered highlight.js language: ${lang}`);
+                }
+            }
+            catch (error) {
+                console.warn('Error initializing highlight.js languages:', error);
+            }
+        }
+
+        marked.use(markedHighlight({
+            langPrefix: 'hljs language-',
+            highlight(code, lang) {
+                const language = hljs.getLanguage(lang) ? lang : '';
+                if (language) {
+                    return hljs.highlight(code, { language }).value;                    
+                }
+
+                // If no valid language, use auto-detection
+                return hljs.highlightAuto(code).value;
+            }
+        }));
+        marked.use(markedExtendedTables());
+        marked.use(markedAlert());
+        marked.setOptions({
             breaks: true,
             gfm: true
         });
@@ -1277,7 +1354,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize the app
     const initializeApp = async () => {
         await registerServiceWorker();
-        initializeMarkDown();
+        // await initializeMarkdown();
         setupToolTips();
         addEventListeners();
 
@@ -1288,21 +1365,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 document.getElementById('page-title').textContent = `${config.siteTitle} - Simple Notes`;
                 document.getElementById('header-title').textContent = config.siteTitle;
-
-                loadNotepads().then(() => {
-                    loadNotes(currentNotepadId).then(() => {
-                        // Update URL with current notepad name if no query param was present
-                        const urlParams = new URLSearchParams(window.location.search);
-                        if (!urlParams.has('id') && currentNotepads.length > 0) {
-                            const currentNotepad = currentNotepads.find(np => np.id === currentNotepadId);
-                            if (currentNotepad) {
-                                updateUrlWithNotepad(currentNotepad.name);
-                            }
-                        }
+                
+                initializeMarkdown(config.highlightLanguages || [])
+                    .catch(error => console.warn(error))
+                    .finally(() => {
+                        // Load notepads after markdown is initialized
+                        loadNotepads().then(() => {
+                            loadNotes(currentNotepadId).then(() => {
+                                // Update URL with current notepad name if no query param was present
+                                const urlParams = new URLSearchParams(window.location.search);
+                                if (!urlParams.has('id') && currentNotepads.length > 0) {
+                                    const currentNotepad = currentNotepads.find(np => np.id === currentNotepadId);
+                                    if (currentNotepad) {
+                                        updateUrlWithNotepad(currentNotepad.name);
+                                    }
+                                }
+                            });
+                            // Mark initial load as complete after first load
+                            isInitialLoad = false;
+                        });
                     });
-                    // Mark initial load as complete after first load
-                    isInitialLoad = false;
-                });
+
             })
             .catch(err => {
                 console.error('Error loading site configuration:', err);
@@ -1312,7 +1395,6 @@ document.addEventListener('DOMContentLoaded', () => {
         appSettings = settingsManager.loadSettings();
         applySettings(appSettings);
     };
-
 
     // Start the app
     initializeApp();
