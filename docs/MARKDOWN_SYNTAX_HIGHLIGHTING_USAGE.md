@@ -1,30 +1,24 @@
-# All supported languages from the highlight.js library
+# Markdown Syntax Highlighting Usage
 
-- By default, DumbPad uses highlight.js for code syntax highlighting which supports ~40 languages out of the box.
-- view documentation / entire list here: https://github.com/highlightjs/highlight.js/blob/main/SUPPORTED_LANGUAGES.md
-- If you want to include all or use a custom set of languages, you can specify them as a comma-separated list in the `HIGHLIGHT_LANGUAGES` environment variable.
+## All supported languages from the highlight.js library
+
+- By default, DumbPad includes support for all ~180 languages supported by highlight.js.
+- If you want to limit it to a custom set of languages, you can specify them as a comma-separated list in the `HIGHLIGHT_LANGUAGES` environment variable.
+- https://github.com/highlightjs/highlight.js/blob/main/SUPPORTED_LANGUAGES.md
 
 ## Full list of supported languages (comma-separated list)
 
-"1c", "abnf", "accesslog", "actionscript", "ada", "angelscript", "apache", "applescript", "arcade", "arduino",
-"armasm", "asciidoc", "aspectj", "autohotkey", "autoit", "avrasm", "awk", "axapta", "bash", "basic", "bnf",
-"brainfuck", "c", "cal", "capnproto", "ceylon", "clean", "clojure-repl", "clojure", "cmake", "coffeescript",
-"coq", "cos", "cpp", "crmsh", "crystal", "csharp", "csp", "css", "d", "dart", "delphi", "diff", "django",
-"dns", "dockerfile", "dos", "dsconfig", "dts", "dust", "ebnf", "elixir", "elm", "erb", "erlang-repl", "erlang",
-"excel", "fix", "flix", "fortran", "fsharp", "gams", "gauss", "gcode", "gherkin", "glsl", "gml", "go", "golo",
-"gradle", "graphql", "groovy", "haml", "handlebars", "haskell", "haxe", "hsp", "http", "hy", "inform7", "ini",
-"irpf90", "isbl", "java", "javascript", "jboss-cli", "json", "julia-repl", "julia", "kotlin", "lasso", "latex",
-"ldif", "leaf", "less", "lisp", "livecodeserver", "livescript", "llvm", "lsl", "lua", "makefile", "markdown",
-"mathematica", "matlab", "maxima", "mel", "mercury", "mipsasm", "mizar", "mojolicious", "monkey", "moonscript",
-"n1ql", "nestedtext", "nginx", "nim", "nix", "node-repl", "nsis", "objectivec", "ocaml", "openscad", "oxygene",
-"parser3", "perl", "pf", "pgsql", "php-template", "php", "plaintext", "pony", "powershell", "processing", "profile",
-"prolog", "properties", "protobuf", "puppet", "purebasic", "python-repl", "python", "q", "qml", "r", "reasonml",
-"rib", "roboconf", "routeros", "rsl", "ruby", "ruleslanguage", "rust", "sas", "scala", "scheme", "scilab", "scss",
-"shell", "smali", "smalltalk", "sml", "sqf", "sql", "stan", "stata", "step21", "stylus", "subunit", "swift",
-"taggerscript", "tap", "tcl", "thrift", "tp", "twig", "typescript", "vala", "vbnet", "vbscript-html", "vbscript",
-"verilog", "vhdl", "vim", "wasm", "wren", "x86asm", "xl", "xml", "xquery", "yaml", "zephir"
+- Use a comma-separated list to specify languages.
+  - Specify a List:
+    - HIGHLIGHT_LANGUAGES=c,csharp,css,dockerfile,go,html,java,javascript,json,kotlin,markdown,perl,php,python,ruby,sql,swift,typescript,xml,yaml
+  - Full List:
+    - `1c`,`abnf`,`accesslog`,`actionscript`,`ada`,`angelscript`,`apache`,`applescript`,`arcade`,`arduino`,`armasm`,`asciidoc`,`aspectj`,`autohotkey`,`autoit`,`avrasm`,`awk`,`axapta`,`bash`,`basic`,`bnf`,`brainfuck`,`c`,`cal`,`capnproto`,`ceylon`,`clean`,`clojure-repl`,`clojure`,`cmake`,`coffeescript`,`coq`,`cos`,`cpp`,`crmsh`,`crystal`,`csharp`,`csp`,`css`,`d`,`dart`,`delphi`,`diff`,`django`,`dns`,`dockerfile`,`dos`,`dsconfig`,`dts`,`dust`,`ebnf`,`elixir`,`elm`,`erb`,`erlang-repl`,`erlang`,`excel`,`fix`,`flix`,`fortran`,`fsharp`,`gams`,`gauss`,`gcode`,`gherkin`,`glsl`,`gml`,`go`,`golo`,`gradle`,`graphql`,`groovy`,`haml`,`handlebars`,`haskell`,`haxe`,`hsp`,`http`,`hy`,`inform7`,`ini`,`irpf90`,`isbl`,`java`,`javascript`,`jboss-cli`,`json`,`julia-repl`,`julia`,`kotlin`,`lasso`,`latex`,`ldif`,`leaf`,`less`,`lisp`,`livecodeserver`,`livescript`,`llvm`,`lsl`,`lua`,`makefile`,`markdown`,`mathematica`,`matlab`,`maxima`,`mel`,`mercury`,`mipsasm`,`mizar`,`mojolicious`,`monkey`,`moonscript`,`n1ql`,`nestedtext`,`nginx`,`nim`,`nix`,`node-repl`,`nsis`,`objectivec`,`ocaml`,`openscad`,`oxygene`,`parser3`,`perl`,`pf`,`pgsql`,`php-template`,`php`,`plaintext`,`pony`,`powershell`,`processing`,`profile`,`prolog`,`properties`,`protobuf`,`puppet`,`purebasic`,`python-repl`,`python`,`q`,`qml`,`r`,`reasonml`,`rib`,`roboconf`,`routeros`,`rsl`,`ruby`,`ruleslanguage`,`rust`,`sas`,`scala`,`scheme`,`scilab`,`scss`,`shell`,`smali`,`smalltalk`,`sml`,`sqf`,`sql`,`stan`,`stata`,`step21`,`stylus`,`subunit`,`swift`,`taggerscript`,`tap`,`tcl`,`thrift`,`tp`,`twig`,`typescript`,`vala`,`vbnet`,`vbscript-html`,`vbscript`,`verilog`,`vhdl`,`vim`,`wasm`,`wren`,`x86asm`,`xl`,`xml`,`xquery`,`yaml`,`zephir`
 
 # Example code snippets for each language
+
+```
+console.log("Hello from autodetect");
+```
 
 ```1c
 Сообщить("Hello from 1c");

@@ -10,7 +10,7 @@ import { marked } from '/js/marked/marked.esm.js';
 import markedExtendedTables from '/js/marked-extended-tables/index.js';
 import markedAlert from '/js/marked-alert/index.js';
 import { markedHighlight } from '/js/marked-highlight/index.js';
-import hljs from '/js/highlightjs/highlight.min.js';
+import hljs from '/js/@highlightjs/highlight.min.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     const DEBUG = false;
@@ -1285,53 +1285,6 @@ document.addEventListener('DOMContentLoaded', () => {
         toggleMarkdownPreview(false, currentSettings.defaultMarkdownPreview, false);
     };
 
-    async function initializeMarkdown() {
-        // // Register all languages dynamically
-        // const allLanguages = [
-        //     "1c", "abnf", "accesslog", "actionscript", "ada", "angelscript", "apache", "applescript", "arcade", "arduino",
-        //     "armasm", "asciidoc", "aspectj", "autohotkey", "autoit", "avrasm", "awk", "axapta", "bash", "basic", "bnf",
-        //     "brainfuck", "c", "cal", "capnproto", "ceylon", "clean", "clojure-repl", "clojure", "cmake", "coffeescript",
-        //     "coq", "cos", "cpp", "crmsh", "crystal", "csharp", "csp", "css", "d", "dart", "delphi", "diff", "django",
-        //     "dns", "dockerfile", "dos", "dsconfig", "dts", "dust", "ebnf", "elixir", "elm", "erb", "erlang-repl", "erlang",
-        //     "excel", "fix", "flix", "fortran", "fsharp", "gams", "gauss", "gcode", "gherkin", "glsl", "gml", "go", "golo",
-        //     "gradle", "graphql", "groovy", "haml", "handlebars", "haskell", "haxe", "hsp", "http", "hy", "inform7", "ini",
-        //     "irpf90", "isbl", "java", "javascript", "jboss-cli", "json", "julia-repl", "julia", "kotlin", "lasso", "latex",
-        //     "ldif", "leaf", "less", "lisp", "livecodeserver", "livescript", "llvm", "lsl", "lua", "makefile", "markdown",
-        //     "mathematica", "matlab", "maxima", "mel", "mercury", "mipsasm", "mizar", "mojolicious", "monkey", "moonscript",
-        //     "n1ql", "nestedtext", "nginx", "nim", "nix", "node-repl", "nsis", "objectivec", "ocaml", "openscad", "oxygene",
-        //     "parser3", "perl", "pf", "pgsql", "php-template", "php", "plaintext", "pony", "powershell", "processing", "profile",
-        //     "prolog", "properties", "protobuf", "puppet", "purebasic", "python-repl", "python", "q", "qml", "r", "reasonml",
-        //     "rib", "roboconf", "routeros", "rsl", "ruby", "ruleslanguage", "rust", "sas", "scala", "scheme", "scilab", "scss",
-        //     "shell", "smali", "smalltalk", "sml", "sqf", "sql", "stan", "stata", "step21", "stylus", "subunit", "swift",
-        //     "taggerscript", "tap", "tcl", "thrift", "tp", "twig", "typescript", "vala", "vbnet", "vbscript-html", "vbscript",
-        //     "verilog", "vhdl", "vim", "wasm", "wren", "x86asm", "xl", "xml", "xquery", "yaml", "zephir"
-        // ];
-        // for (const lang of allLanguages) {
-            
-        //     const module = await import(`/js/highlightjs/languages/${lang}.min.js`);
-        //     hljs.registerLanguage(lang, module.default);
-        //     // Aliases
-        //     if (lang === 'xml') hljs.registerLanguage('html', module.default);
-        // }
-
-        marked.use(markedExtendedTables());
-        marked.use(markedAlert());
-        marked.use(markedHighlight({
-            langPrefix: 'hljs language-',
-            highlight(code, lang) {
-                const language = hljs.getLanguage(lang) ? lang : 'plaintext';
-                return hljs.highlight(code, { language }).value;
-            }
-        }));
-        marked.setOptions({
-            breaks: true,
-            gfm: true
-        });
-        
-        // Set initial highlight theme based on current theme
-        updateHighlightTheme(currentTheme);
-    }
-
     // Function to update highlight.js theme based on current app theme
     function updateHighlightTheme(theme) {
         // Remove any existing highlight.js theme
@@ -1342,8 +1295,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Determine which theme CSS to load
         const themeCss = theme === 'dark' 
-            ? '/css/highlightjs/github-dark.min.css'
-            : '/css/highlightjs/github.min.css';
+            ? '/css/@highlightjs/github-dark.min.css'
+            : '/css/@highlightjs/github.min.css';
         
         // Create and append new theme link
         const link = document.createElement('link');
@@ -1353,12 +1306,55 @@ document.addEventListener('DOMContentLoaded', () => {
         document.head.appendChild(link);
     }
 
+    async function initializeMarkdown(highlightLanguages = []) {
+        // Set initial highlight theme based on current theme
+        updateHighlightTheme(currentTheme);
+
+        // Register languages dynamically
+        if (highlightLanguages.length > 0) { 
+            try {
+                for (const lang of highlightLanguages) {
+                    const langAlias = lang === 'html' ? 'xml' : lang; // Use 'xml' for HTML syntax highlighting
+                    const module = await import(`/js/@highlightjs/languages/${langAlias}.min.js`);
+                    if (!module || !module.default) {
+                        console.warn(`Language module for ${langAlias} not found or invalid`);
+                        continue;
+                    }
+                    hljs.registerLanguage(lang, module.default);
+                    // console.log(`Registered highlight.js language: ${lang}`);
+                }
+            }
+            catch (error) {
+                console.warn('Error initializing highlight.js languages:', error);
+            }
+        }
+
+        marked.use(markedHighlight({
+            langPrefix: 'hljs language-',
+            highlight(code, lang) {
+                const language = hljs.getLanguage(lang) ? lang : '';
+                if (language) {
+                    return hljs.highlight(code, { language }).value;                    
+                }
+
+                // If no valid language, use auto-detection
+                return hljs.highlightAuto(code).value;
+            }
+        }));
+        marked.use(markedExtendedTables());
+        marked.use(markedAlert());
+        marked.setOptions({
+            breaks: true,
+            gfm: true
+        });
+    }
+
     const searchManager = new SearchManager(fetchWithPin, selectNotepad, closeAllModals);
 
     // Initialize the app
     const initializeApp = async () => {
         await registerServiceWorker();
-        await initializeMarkdown();
+        // await initializeMarkdown();
         setupToolTips();
         addEventListeners();
 
@@ -1369,21 +1365,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 document.getElementById('page-title').textContent = `${config.siteTitle} - Simple Notes`;
                 document.getElementById('header-title').textContent = config.siteTitle;
-
-                loadNotepads().then(() => {
-                    loadNotes(currentNotepadId).then(() => {
-                        // Update URL with current notepad name if no query param was present
-                        const urlParams = new URLSearchParams(window.location.search);
-                        if (!urlParams.has('id') && currentNotepads.length > 0) {
-                            const currentNotepad = currentNotepads.find(np => np.id === currentNotepadId);
-                            if (currentNotepad) {
-                                updateUrlWithNotepad(currentNotepad.name);
-                            }
-                        }
+                
+                initializeMarkdown(config.highlightLanguages || [])
+                    .catch(error => console.warn(error))
+                    .finally(() => {
+                        // Load notepads after markdown is initialized
+                        loadNotepads().then(() => {
+                            loadNotes(currentNotepadId).then(() => {
+                                // Update URL with current notepad name if no query param was present
+                                const urlParams = new URLSearchParams(window.location.search);
+                                if (!urlParams.has('id') && currentNotepads.length > 0) {
+                                    const currentNotepad = currentNotepads.find(np => np.id === currentNotepadId);
+                                    if (currentNotepad) {
+                                        updateUrlWithNotepad(currentNotepad.name);
+                                    }
+                                }
+                            });
+                            // Mark initial load as complete after first load
+                            isInitialLoad = false;
+                        });
                     });
-                    // Mark initial load as complete after first load
-                    isInitialLoad = false;
-                });
+
             })
             .catch(err => {
                 console.error('Error loading site configuration:', err);
