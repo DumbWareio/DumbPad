@@ -252,6 +252,110 @@ document.addEventListener('DOMContentLoaded', async () => {
         editor.addEventListener('click', () => collaborationManager.updateLocalCursor());
         editor.addEventListener('scroll', () => cursorManager.updateAllCursors());
 
+        // Handle tab/shift-tab indentation
+        editor.addEventListener('keydown', (e) => {
+            if (e.key === 'Tab') {
+                e.preventDefault(); // Prevent default tab behavior (focus change)
+                
+                const textarea = e.target;
+                const start = textarea.selectionStart;
+                const end = textarea.selectionEnd;
+                const value = textarea.value;
+                
+                if (e.shiftKey) {
+                    // Shift+Tab: Remove indentation
+                    if (start === end) {
+                        // No selection: remove indentation from current line
+                        const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+                        const lineText = value.substring(lineStart, value.indexOf('\n', start));
+                        
+                        if (lineText.startsWith('  ')) {
+                            // Remove two spaces from the beginning of the line
+                            const newValue = value.substring(0, lineStart) + 
+                                           lineText.substring(2) + 
+                                           value.substring(lineStart + lineText.length);
+                            
+                            textarea.value = newValue;
+                            // Adjust cursor position
+                            const newCursorPos = Math.max(lineStart, start - 2);
+                            textarea.setSelectionRange(newCursorPos, newCursorPos);
+                            
+                            // Trigger input event for collaboration
+                            textarea.dispatchEvent(new InputEvent('input', {
+                                inputType: 'deleteContent',
+                                data: null
+                            }));
+                        }
+                    } else {
+                        // Selection: remove indentation from all selected lines
+                        const lines = value.split('\n');
+                        const startLine = value.substring(0, start).split('\n').length - 1;
+                        const endLine = value.substring(0, end).split('\n').length - 1;
+                        
+                        let totalRemoved = 0;
+                        for (let i = startLine; i <= endLine; i++) {
+                            if (lines[i].startsWith('  ')) {
+                                lines[i] = lines[i].substring(2);
+                                totalRemoved += 2;
+                            }
+                        }
+                        
+                        if (totalRemoved > 0) {
+                            const newValue = lines.join('\n');
+                            textarea.value = newValue;
+                            
+                            // Adjust selection
+                            const newStart = Math.max(0, start - (startLine < endLine ? 0 : Math.min(2, totalRemoved)));
+                            const newEnd = Math.max(newStart, end - totalRemoved);
+                            textarea.setSelectionRange(newStart, newEnd);
+                            
+                            // Trigger input event for collaboration
+                            textarea.dispatchEvent(new InputEvent('input', {
+                                inputType: 'deleteContent',
+                                data: null
+                            }));
+                        }
+                    }
+                } else {
+                    // Tab: Add indentation
+                    if (start === end) {
+                        // No selection: insert two spaces at cursor
+                        const newValue = value.substring(0, start) + '  ' + value.substring(end);
+                        textarea.value = newValue;
+                        textarea.setSelectionRange(start + 2, start + 2);
+                        
+                        // Trigger input event for collaboration
+                        textarea.dispatchEvent(new InputEvent('input', {
+                            inputType: 'insertText',
+                            data: '  '
+                        }));
+                    } else {
+                        // Selection: indent all selected lines
+                        const lines = value.split('\n');
+                        const startLine = value.substring(0, start).split('\n').length - 1;
+                        const endLine = value.substring(0, end).split('\n').length - 1;
+                        
+                        for (let i = startLine; i <= endLine; i++) {
+                            lines[i] = '  ' + lines[i];
+                        }
+                        
+                        const newValue = lines.join('\n');
+                        textarea.value = newValue;
+                        
+                        // Adjust selection
+                        const addedChars = (endLine - startLine + 1) * 2;
+                        textarea.setSelectionRange(start + 2, end + addedChars);
+                        
+                        // Trigger input event for collaboration
+                        textarea.dispatchEvent(new InputEvent('input', {
+                            inputType: 'insertText',
+                            data: '  '.repeat(endLine - startLine + 1)
+                        }));
+                    }
+                }
+            }
+        });
+
         // Handle text input events
         editor.addEventListener('input', (e) => {
             if (collaborationManager.isReceivingUpdate) {
