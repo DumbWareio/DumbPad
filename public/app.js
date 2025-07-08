@@ -102,7 +102,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         confirmationManager,
         saveNotes,
         renameNotepad,
-        addCopyButtonsToCodeBlocks: () => previewManager.addCopyButtonsToCodeBlocks()
+        addCopyLangButtonsToCodeBlocks: () => previewManager.addCopyLangButtonsToCodeBlocks()
     });
     collaborationManager.DEBUG = DEBUG;
     collaborationManager.setupWebSocket(); // Initialize WebSocket connection immediately

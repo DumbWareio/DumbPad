@@ -14,7 +14,7 @@ export class PreviewManager {
         previewMarkdownBtn,
         toaster,
         collaborationManager,
-        marked
+        marked,
     }) {
         this.editor = editor;
         this.editorContainer = editorContainer;
@@ -48,7 +48,7 @@ export class PreviewManager {
      */
     renderMarkdownPreview(content) {
         this.previewPane.innerHTML = this.marked.parse(content);
-        this.addCopyButtonsToCodeBlocks();
+        this.addCopyLangButtonsToCodeBlocks();
     }
 
     /**
@@ -93,59 +93,148 @@ export class PreviewManager {
     }
 
     /**
-     * Add copy buttons to code blocks in the preview pane
+     * Add copy buttons with language labels to code blocks
+     * @param {HTMLElement|string} target - Either a DOM element or HTML string to process
+     * @param {boolean} printMode - Whether this is for print (disables copy functionality)
+     * @returns {string|void} - Returns HTML string if target was a string, void if target was DOM element
      */
-    addCopyButtonsToCodeBlocks() {
-        const codeBlocks = this.previewPane.querySelectorAll('pre');
+    addCopyLangButtonsToCodeBlocks(target = null, printMode = false) {
+        let container;
+        let returnString = false;
+        
+        // Determine the target container
+        if (typeof target === 'string') {
+            // Working with HTML string (for print)
+            container = document.createElement('div');
+            container.innerHTML = target;
+            returnString = true;
+        } else if (target instanceof HTMLElement) {
+            // Working with DOM element
+            container = target;
+        } else {
+            // Default to preview pane
+            container = this.previewPane;
+        }
+        
+        const codeBlocks = container.querySelectorAll('pre');
         
         codeBlocks.forEach(pre => {
             // Remove existing copy button if present
-            const existingButton = pre.querySelector('.copy-button');
+            const existingButton = pre.querySelector('.code-lang-copy-button');
             if (existingButton) {
                 existingButton.remove();
             }
             
-            // Create copy button
-            const copyButton = document.createElement('button');
-            copyButton.className = 'copy-button';
-            copyButton.innerHTML = `
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                    <path d="M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z" />
-                    <path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" />
-                </svg>
-            `;
-            copyButton.setAttribute('aria-label', 'Copy to clipboard');
+            // Extract language from code element classes
+            const codeElement = pre.querySelector('code');
+            let language = 'text';
+            if (codeElement && codeElement.className) {
+                // Look for hljs language- class pattern
+                const langMatch = codeElement.className.match(/language-(\w+)/);
+                if (langMatch) {
+                    language = langMatch[1];
+                } else if (codeElement.className.includes('hljs')) {
+                    // If hljs class exists but no specific language, it was auto-detected
+                    language = 'auto';
+                }
+            }
             
-            // Add click handler
-            copyButton.addEventListener('click', async () => {
-                const codeElement = pre.querySelector('code');
-                const textToCopy = codeElement ? codeElement.textContent : pre.textContent;
+            // Create button element (div for print mode, button for interactive mode)
+            const langButton = document.createElement(printMode ? 'div' : 'button');
+            langButton.className = `code-lang-copy-button${printMode ? ' print-label' : ''}`;
+            langButton.setAttribute('aria-label', printMode ? 
+                `Code language: ${language}` : 
+                `Code language: ${language}. Click to copy code to clipboard`);
+            
+            // Create the language text span
+            const langText = document.createElement('span');
+            langText.className = 'lang-text';
+            langText.textContent = language;
+            langButton.appendChild(langText);
+            
+            // Add copy functionality only for interactive mode
+            if (!printMode) {
+                // Create the copy icon (initially hidden)
+                const copyIcon = document.createElement('span');
+                copyIcon.className = 'copy-icon';
+                copyIcon.innerHTML = `
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                        <path d="M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z" />
+                        <path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" />
+                    </svg>
+                `;
+                langButton.appendChild(copyIcon);
                 
-                try {
-                    await navigator.clipboard.writeText(textToCopy);
-                    this.toaster.show('Copied to clipboard');
-                } catch (err) {
-                    // Fallback for older browsers
-                    const textArea = document.createElement('textarea');
-                    textArea.value = textToCopy;
-                    document.body.appendChild(textArea);
-                    textArea.select();
+                // Add click handler for copying
+                langButton.addEventListener('click', async () => {
+                    const textToCopy = codeElement ? codeElement.textContent : pre.textContent;
                     
                     try {
-                        document.execCommand('copy');
+                        await navigator.clipboard.writeText(textToCopy);
                         this.toaster.show('Copied to clipboard');
-                    } catch (fallbackErr) {
-                        this.toaster.show('Failed to copy code', 'error');
+                    } catch (err) {
+                        // Fallback for older browsers
+                        const textArea = document.createElement('textarea');
+                        textArea.value = textToCopy;
+                        document.body.appendChild(textArea);
+                        textArea.select();
+                        
+                        try {
+                            document.execCommand('copy');
+                            this.toaster.show('Copied to clipboard');
+                        } catch (fallbackErr) {
+                            this.toaster.show('Failed to copy code', 'error');
+                        }
+                        
+                        document.body.removeChild(textArea);
                     }
+                });
+            }
+            
+            // Add the button to the pre element
+            pre.appendChild(langButton);
+            
+            // Ensure the pre element is wide enough to accommodate the button
+            this.ensurePreMinWidth(pre, langButton, printMode);
+        });
+        
+        // Return HTML string if we were working with a string
+        return returnString ? container.innerHTML : undefined;
+    }
+
+    /**
+     * Ensure the pre element has sufficient minimum width to accommodate the language/copy button
+     * @param {HTMLElement} pre - The pre element containing the code block
+     * @param {HTMLElement} button - The language/copy button element
+     * @param {boolean} printMode - Whether this is for print mode
+     */
+    ensurePreMinWidth(pre, button, printMode = false) {
+        if (printMode) {
+            // For print mode, use CSS-based minimum width since DOM measurements aren't reliable
+            // Estimate button width based on typical language names and styling
+            pre.style.minWidth = '120px';
+        } else {
+            // For interactive mode, measure the actual button width after it's rendered
+            // Use requestAnimationFrame to ensure the button is fully rendered
+            requestAnimationFrame(() => {
+                const buttonWidth = button.offsetWidth;
+                const buttonHeight = button.offsetHeight;
+                
+                // Only proceed if the button has been rendered (has dimensions)
+                if (buttonWidth > 0) {
+                    const currentMinWidth = parseInt(pre.style.minWidth) || 0;
                     
-                    document.body.removeChild(textArea);
+                    // Set minimum width to at least the button width plus padding
+                    // Add extra padding to ensure the button doesn't appear cramped
+                    const requiredMinWidth = buttonWidth + 20;
+                    
+                    if (requiredMinWidth > currentMinWidth) {
+                        pre.style.minWidth = `${requiredMinWidth}px`;
+                    }
                 }
             });
-            
-            // Add button to the pre element
-            pre.appendChild(copyButton);
-        });
+        }
     }
 
     /**
@@ -204,6 +293,11 @@ export class PreviewManager {
     async preparePrintContent(content, notepadName, currentSettings, currentTheme) {
         const isMarkdownFile = notepadName.toLowerCase().endsWith('.md');
         let formattedContent = this.getFormattedContentForPrint(content, isMarkdownFile || this.isPreviewMode);
+        
+        // Add language labels to code blocks for print
+        if (isMarkdownFile || this.isPreviewMode) {
+            formattedContent = this.addCopyLangButtonsToCodeBlocks(formattedContent, true);
+        }
         
         // Auto-expand details elements for print
         if (!currentSettings.disablePrintExpand) {
@@ -272,15 +366,8 @@ export class PreviewManager {
                     print-color-adjust: exact !important;
                 }
 
-                /* Hide copy buttons in print */
-                .copy-button {
-                    display: none !important;
-                }
-
                 /* Inject all preview styles into print media */
                 ${previewStyles}
-                /* Ensure highlight.js styles are applied */
-                
             }
         `;
 
