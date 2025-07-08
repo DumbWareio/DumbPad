@@ -1,0 +1,395 @@
+/**
+ * PreviewManager handles all markdown preview functionality including:
+ * - Toggling between edit and preview modes
+ * - Rendering markdown content
+ * - Managing preview styles and state
+ * - Adding copy buttons to code blocks
+ */
+export class PreviewManager {
+    constructor({
+        editor,
+        editorContainer,
+        previewContainer,
+        previewPane,
+        previewMarkdownBtn,
+        toaster,
+        collaborationManager,
+        marked
+    }) {
+        this.editor = editor;
+        this.editorContainer = editorContainer;
+        this.previewContainer = previewContainer;
+        this.previewPane = previewPane;
+        this.previewMarkdownBtn = previewMarkdownBtn;
+        this.toaster = toaster;
+        this.collaborationManager = collaborationManager;
+        this.marked = marked;
+        
+        this.isPreviewMode = false;
+        this.DEBUG = false;
+    }
+
+    /**
+     * Get current preview mode state
+     */
+    getPreviewMode() {
+        return this.isPreviewMode;
+    }
+
+    /**
+     * Set preview mode state
+     */
+    setPreviewMode(mode) {
+        this.isPreviewMode = mode;
+    }
+
+    /**
+     * Render markdown content to the preview pane
+     */
+    renderMarkdownPreview(content) {
+        this.previewPane.innerHTML = this.marked.parse(content);
+        this.addCopyButtonsToCodeBlocks();
+    }
+
+    /**
+     * Toggle between edit and preview modes
+     */
+    toggleMarkdownPreview(toggle, enable, enableStatusMessage = true) {
+        if (toggle) {
+            this.isPreviewMode = !this.isPreviewMode;
+        } else {
+            this.isPreviewMode = enable;
+        }
+        
+        if (this.isPreviewMode) {
+            this.inheritEditorStyles(this.previewPane);
+            this.renderMarkdownPreview(this.editor.value);
+            this.previewContainer.style.display = 'block';
+            this.editorContainer.style.display = 'none';
+            this.previewMarkdownBtn.classList.add('active');
+            if (enableStatusMessage) {
+                this.toaster.show('Markdown Preview On', 'success');
+            }
+        } else {
+            this.previewContainer.style.display = 'none';
+            this.editorContainer.style.display = 'block';
+            this.previewMarkdownBtn.classList.remove('active');
+            this.editor.focus();
+            if (enableStatusMessage) {
+                this.toaster.show('Markdown Preview Off', 'error');
+            }
+        }
+        
+        this.collaborationManager.updateLocalCursor();
+    }
+
+    /**
+     * Inherit editor styles for the preview pane
+     */
+    inheritEditorStyles(element) {
+        element.style.backgroundColor = window.getComputedStyle(this.editor).backgroundColor;
+        element.style.color = window.getComputedStyle(this.editor).color;
+        element.style.padding = window.getComputedStyle(this.editor).padding;
+    }
+
+    /**
+     * Add copy buttons to code blocks in the preview pane
+     */
+    addCopyButtonsToCodeBlocks() {
+        const codeBlocks = this.previewPane.querySelectorAll('pre');
+        
+        codeBlocks.forEach(pre => {
+            // Remove existing copy button if present
+            const existingButton = pre.querySelector('.copy-button');
+            if (existingButton) {
+                existingButton.remove();
+            }
+            
+            // Create copy button
+            const copyButton = document.createElement('button');
+            copyButton.className = 'copy-button';
+            copyButton.innerHTML = `
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                    <path d="M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z" />
+                    <path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" />
+                </svg>
+            `;
+            copyButton.setAttribute('aria-label', 'Copy to clipboard');
+            
+            // Add click handler
+            copyButton.addEventListener('click', async () => {
+                const codeElement = pre.querySelector('code');
+                const textToCopy = codeElement ? codeElement.textContent : pre.textContent;
+                
+                try {
+                    await navigator.clipboard.writeText(textToCopy);
+                    this.toaster.show('Copied to clipboard');
+                } catch (err) {
+                    // Fallback for older browsers
+                    const textArea = document.createElement('textarea');
+                    textArea.value = textToCopy;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    
+                    try {
+                        document.execCommand('copy');
+                        this.toaster.show('Copied to clipboard');
+                    } catch (fallbackErr) {
+                        this.toaster.show('Failed to copy code', 'error');
+                    }
+                    
+                    document.body.removeChild(textArea);
+                }
+            });
+            
+            // Add button to the pre element
+            pre.appendChild(copyButton);
+        });
+    }
+
+    /**
+     * Clear the preview pane content
+     */
+    clearPreview() {
+        this.previewPane.innerHTML = '';
+    }
+
+    /**
+     * Update preview content if in preview mode
+     */
+    updatePreviewIfActive(content) {
+        if (this.isPreviewMode) {
+            this.renderMarkdownPreview(content);
+        }
+    }
+
+    /**
+     * Generate formatted content for printing
+     */
+    getFormattedContentForPrint(content, isMarkdownFile) {
+        if (isMarkdownFile || this.isPreviewMode) {
+            return this.marked.parse(content);
+        } else {
+            return content
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/\n/g, '<br>');
+        }
+    }
+
+    /**
+     * Auto-expand details elements for print
+     */
+    expandDetailsForPrint(formattedContent) {
+        if (formattedContent.includes('<details')) {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = formattedContent;
+            
+            // Find all details elements and add the 'open' attribute
+            const detailsElements = tempDiv.querySelectorAll('details');
+            detailsElements.forEach(details => {
+                details.setAttribute('open', '');
+            });
+            
+            return tempDiv.innerHTML;
+        }
+        return formattedContent;
+    }
+
+    /**
+     * Prepare content for printing with themes and styles
+     */
+    async preparePrintContent(content, notepadName, currentSettings, currentTheme) {
+        const isMarkdownFile = notepadName.toLowerCase().endsWith('.md');
+        let formattedContent = this.getFormattedContentForPrint(content, isMarkdownFile || this.isPreviewMode);
+        
+        // Auto-expand details elements for print
+        if (!currentSettings.disablePrintExpand) {
+            formattedContent = this.expandDetailsForPrint(formattedContent);
+        }
+
+        // Load main and preview styles for print
+        let mainStyles = '';
+        let previewStyles = '';
+        let highlightStyles = '';
+        try {
+            const [mainResponse, previewResponse] = await Promise.all([
+                fetch('Assets/styles.css'),
+                fetch('Assets/preview-styles.css')
+            ]);
+            mainStyles = await mainResponse.text();
+            previewStyles = await previewResponse.text();
+        } catch (error) {
+            console.warn('Could not load styles for print:', error);
+        }
+        
+        // Get the current highlight.js theme CSS
+        try {
+            const highlightThemeLink = document.querySelector('link[data-highlight-theme]');
+            if (highlightThemeLink) {
+                const highlightResponse = await fetch(highlightThemeLink.href);
+                highlightStyles = await highlightResponse.text();
+            }
+        } catch (error) {
+            console.warn('Could not load highlight.js theme for print:', error);
+        }
+
+        // Create print-specific styles
+        const printStyles = `
+            /* Base print layout */
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                line-height: 1.6;
+                padding: 2rem;
+                color: var(--text-color);
+                background-color: var(--bg-color);
+                margin: 0;
+            }
+
+            /* Ensure proper theme inheritance */
+            * {
+                color: inherit;
+                background-color: inherit;
+            }
+
+            @media print {
+                /* Force browsers to print background colors */
+                body {
+                    padding: 1rem;
+                    color: var(--text-color) !important;
+                    background-color: var(--bg-color) !important;
+                    -webkit-print-color-adjust: exact !important;
+                    color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                }
+
+                /* Force all elements to preserve their theme colors */
+                *, *::before, *::after {
+                    -webkit-print-color-adjust: exact !important;
+                    color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                }
+
+                /* Hide copy buttons in print */
+                .copy-button {
+                    display: none !important;
+                }
+
+                /* Inject all preview styles into print media */
+                ${previewStyles}
+                /* Ensure highlight.js styles are applied */
+                
+            }
+        `;
+
+        return {
+            formattedContent,
+            mainStyles,
+            previewStyles,
+            highlightStyles,
+            printStyles
+        };
+    }
+
+    /**
+     * Update highlight.js theme based on current app theme
+     */
+    updateHighlightTheme(theme) {
+        // Remove any existing highlight.js theme
+        const existingTheme = document.querySelector('link[data-highlight-theme]');
+        if (existingTheme) {
+            existingTheme.remove();
+        }
+        
+        // Determine which theme CSS to load
+        const themeCss = theme === 'dark' 
+            ? '/css/@highlightjs/github-dark.min.css'
+            : '/css/@highlightjs/github.min.css';
+        
+        // Create and append new theme link
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = themeCss;
+        link.setAttribute('data-highlight-theme', theme);
+        document.head.appendChild(link);
+    }
+
+    /**
+     * Initialize markdown parser with syntax highlighting and extensions
+     */
+    async initializeMarkdown(currentTheme, highlightLanguages = []) {
+        // Set initial highlight theme based on current theme
+        this.updateHighlightTheme(currentTheme);
+
+        // Import hljs once for the entire method
+        const { default: hljs } = await import('/js/@highlightjs/highlight.min.js');
+
+        // Register languages dynamically in parallel
+        if (highlightLanguages.length > 0) { 
+            try {
+                // Create array of import promises for parallel loading
+                const importPromises = highlightLanguages.map(async (lang) => {
+                    const langAlias = lang === 'html' ? 'xml' : lang; // Use 'xml' for HTML syntax highlighting
+                    try {
+                        const module = await import(`/js/@highlightjs/languages/${langAlias}.min.js`);
+                        if (module && module.default) {
+                            return { lang, module: module.default };
+                        }
+                    } catch (e) {
+                        console.warn(`Language module for ${langAlias} not found or invalid`);
+                    }
+                    return null;
+                });
+
+                // Wait for all imports to complete in parallel
+                const results = await Promise.all(importPromises);
+
+                // Register each successfully imported language
+                for (const result of results) {
+                    if (result) {
+                        hljs.registerLanguage(result.lang, result.module);
+                        if (this.DEBUG) console.log(`Registered highlight.js language: ${result.lang}`);
+                    }
+                }
+            }
+            catch (error) {
+                console.warn('Error initializing highlight.js languages:', error);
+            }
+        }
+
+        // Import and configure marked extensions
+        const { markedHighlight } = await import('/js/marked-highlight/index.js');
+        const markedExtendedTables = (await import('/js/marked-extended-tables/index.js')).default;
+        const markedAlert = (await import('/js/marked-alert/index.js')).default;
+
+        this.marked.use(markedHighlight({
+            langPrefix: 'hljs language-',
+            highlight(code, lang) {
+                const language = hljs.getLanguage(lang) ? lang : '';
+                if (language) {
+                    return hljs.highlight(code, { language }).value;                    
+                }
+
+                // If no valid language, use auto-detection
+                return hljs.highlightAuto(code).value;
+            }
+        }));
+        this.marked.use(markedExtendedTables);
+        this.marked.use(markedAlert);
+        this.marked.setOptions({
+            breaks: true,
+            gfm: true
+        });
+    }
+
+    /**
+     * Add event listeners for preview functionality
+     */
+    addEventListeners() {
+        this.previewMarkdownBtn.addEventListener('click', () => {
+            this.toggleMarkdownPreview(true);
+        });
+    }
+}

@@ -6,15 +6,11 @@ import SearchManager from './managers/search.js';
 import StorageManager from './managers/storage.js';
 import SettingsManager from './managers/settings.js'
 import ConfirmationManager from './managers/confirmation.js';
+import { PreviewManager } from './managers/preview.js';
 import { marked } from '/js/marked/marked.esm.js';
-import markedExtendedTables from '/js/marked-extended-tables/index.js';
-import markedAlert from '/js/marked-alert/index.js';
-import { markedHighlight } from '/js/marked-highlight/index.js';
-import hljs from '/js/@highlightjs/highlight.min.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
     const DEBUG = false;
-    let isPreviewMode = false;
     const THEME_KEY = 'dumbpad_theme';
     let appSettings = {};
     const editorContainer = document.getElementById('editor-container');
@@ -70,6 +66,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     let currentTheme =  storageManager.load(THEME_KEY);
     const settingsManager = new SettingsManager(storageManager, applySettings);
     const confirmationManager = new ConfirmationManager();
+    
+    // Initialize preview manager
+    const previewManager = new PreviewManager({
+        editor,
+        editorContainer,
+        previewContainer,
+        previewPane,
+        previewMarkdownBtn,
+        toaster,
+        collaborationManager: null, // Will be set after collaboration manager is created
+        marked
+    });
+    previewManager.DEBUG = DEBUG;
 
     // Generate user ID and color
     const userId = Math.random().toString(36).substring(2, 15);
@@ -93,10 +102,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         confirmationManager,
         saveNotes,
         renameNotepad,
-        addCopyButtonsToCodeBlocks: () => addCopyButtonsToCodeBlocks()
+        addCopyButtonsToCodeBlocks: () => previewManager.addCopyButtonsToCodeBlocks()
     });
     collaborationManager.DEBUG = DEBUG;
     collaborationManager.setupWebSocket(); // Initialize WebSocket connection immediately
+    
+    // Set collaboration manager reference in preview manager
+    previewManager.collaborationManager = collaborationManager;
 
     // Generate a deterministic color for the user based on their ID
     function getRandomColor(userId) {
@@ -235,10 +247,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             previousEditorValue = data.content;
             editor.value = data.content;
             
-            if (isPreviewMode) {
+            if (previewManager.getPreviewMode()) {
                 // Update preview if in preview mode
-                previewPane.innerHTML = marked.parse(data.content);
-                addCopyButtonsToCodeBlocks(); // Add copy buttons after rendering
+                previewManager.renderMarkdownPreview(data.content);
             }
         } catch (err) {
             console.error('Error loading notes:', err);
@@ -441,10 +452,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     
             previousEditorValue = target.value;
             // Update markdown preview in real-time if in preview mode
-            if (isPreviewMode) {
-                previewPane.innerHTML = marked.parse(target.value);
-                addCopyButtonsToCodeBlocks(); // Add copy buttons after rendering
-            }
+            previewManager.updatePreviewIfActive(target.value);
 
             debouncedSave(target.value);
             collaborationManager.updateLocalCursor();
@@ -473,101 +481,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
     
             // Update markdown preview in real-time if in preview mode
-            if (isPreviewMode) {
-                previewPane.innerHTML = marked.parse(target.value);
-                addCopyButtonsToCodeBlocks(); // Add copy buttons after rendering
-            }
+            previewManager.updatePreviewIfActive(target.value);
         
             debouncedSave(target.value);
             collaborationManager.updateLocalCursor();
-        });
-    }
-
-    // Function to render markdown preview
-    function renderMarkdownPreview(content) {
-        previewPane.innerHTML = marked.parse(content);
-        addCopyButtonsToCodeBlocks();
-    }
-
-    // Function to toggle between edit and preview modes
-    function toggleMarkdownPreview(toggle, enable, enableStatusMessage = true) {
-        if (toggle) isPreviewMode = !isPreviewMode;
-        else isPreviewMode = enable;
-        
-        if (isPreviewMode) {
-            inheritEditorStyles(previewPane);
-            renderMarkdownPreview(editor.value);
-            previewContainer.style.display = 'block';
-            editorContainer.style.display = 'none';
-            previewMarkdownBtn.classList.add('active');
-            if (enableStatusMessage) toaster.show('Markdown Preview On', 'success');
-        } else {
-            previewContainer.style.display = 'none';
-            editorContainer.style.display = 'block';
-            previewMarkdownBtn.classList.remove('active');
-            editor.focus();
-            if (enableStatusMessage) toaster.show('Markdown Preview Off', 'error');
-        }
-        collaborationManager.updateLocalCursor();
-    }
-
-    function inheritEditorStyles(element) {
-        element.style.backgroundColor = window.getComputedStyle(editor).backgroundColor;
-        element.style.color = window.getComputedStyle(editor).color;
-        element.style.padding = window.getComputedStyle(editor).padding;
-    }
-
-    // Add copy buttons to code blocks
-    function addCopyButtonsToCodeBlocks() {
-        const codeBlocks = previewPane.querySelectorAll('pre');
-        
-        codeBlocks.forEach(pre => {
-            // Remove existing copy button if present
-            const existingButton = pre.querySelector('.copy-button');
-            if (existingButton) {
-                existingButton.remove();
-            }
-            
-            // Create copy button
-            const copyButton = document.createElement('button');
-            copyButton.className = 'copy-button';
-            copyButton.innerHTML = `
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                    <path d="M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z" />
-                    <path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" />
-                </svg>
-            `;
-            copyButton.setAttribute('aria-label', 'Copy to clipboard');
-            
-            // Add click handler
-            copyButton.addEventListener('click', async () => {
-                const codeElement = pre.querySelector('code');
-                const textToCopy = codeElement ? codeElement.textContent : pre.textContent;
-                
-                try {
-                    await navigator.clipboard.writeText(textToCopy);
-                    toaster.show('Copied to clipboard');
-                } catch (err) {
-                    // Fallback for older browsers
-                    const textArea = document.createElement('textarea');
-                    textArea.value = textToCopy;
-                    document.body.appendChild(textArea);
-                    textArea.select();
-                    
-                    try {
-                        document.execCommand('copy');
-                        toaster.show('Copied to clipboard');
-                    } catch (fallbackErr) {
-                        toaster.show('Failed to copy code', 'error');
-                    }
-                    
-                    document.body.removeChild(textArea);
-                }
-            });
-            
-            // Add button to the pre element
-            pre.appendChild(copyButton);
         });
     }
 
@@ -585,8 +502,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             previousEditorValue = '';
             
             // Clear preview if in preview mode
-            if (isPreviewMode) {
-                previewPane.innerHTML = '';
+            if (previewManager.getPreviewMode()) {
+                previewManager.clearPreview();
             }
             
             // Update URL with new notepad name
@@ -765,142 +682,56 @@ document.addEventListener('DOMContentLoaded', async () => {
     const printNotepad = async () => {
         const notepadName = notepadSelector.options[notepadSelector.selectedIndex].text;
         const content = editor.value;
+        const currentSettings = settingsManager.getSettings();
+        const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
         
         const printWindow = window.open('', '_blank');
 
-        let formattedContent = notepadName.toLowerCase().endsWith('.md') || isPreviewMode
-            ? marked.parse(content)
-            : content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
-        
-        // Auto-expand details elements for print by adding 'open' attribute
-        const currentSettings = settingsManager.getSettings();
-        if (formattedContent.includes('<details') && !currentSettings.disablePrintExpand) {
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = formattedContent;
-            
-            // Find all details elements and add the 'open' attribute
-            const detailsElements = tempDiv.querySelectorAll('details');
-            detailsElements.forEach(details => {
-                details.setAttribute('open', '');
-            });
-            
-            formattedContent = tempDiv.innerHTML;
-        }
-        
-        // Get current theme
-        const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
-        
-        // Load main and preview styles for print
-        let mainStyles = '';
-        let previewStyles = '';
-        let highlightStyles = '';
-        let printStyles = '';
         try {
-            const [mainResponse, previewResponse] = await Promise.all([
-                fetch('Assets/styles.css'),
-                fetch('Assets/preview-styles.css')
-            ]);
-            mainStyles = await mainResponse.text();
-            previewStyles = await previewResponse.text();
+            const { formattedContent, mainStyles, previewStyles, highlightStyles, printStyles } = 
+                await previewManager.preparePrintContent(content, notepadName, currentSettings, currentTheme);
+            
+            printWindow.document.write(`
+                <!DOCTYPE html>
+                <html data-theme="${currentTheme}">
+                <head>
+                    <title>${notepadName}</title>
+                    <style>
+                        /* Main application styles */
+                        ${mainStyles}
+                        
+                        /* Preview styles */
+                        ${previewStyles}
+                        
+                        /* Highlight.js theme styles */
+                        ${highlightStyles}
+                        
+                        /* Dynamic print styles with injected preview styles */
+                        ${printStyles}
+                    </style>
+                </head>
+                <body>
+                    <div id="preview-pane">
+                        ${formattedContent}
+                    </div>
+                </body>
+                </html>
+            `);
+            
+            printWindow.document.close();
+            printWindow.focus();
+            
+            setTimeout(() => {
+                printWindow.print();
+                printWindow.close();
+            }, 250);
+
+            toaster.show('Printing...');
         } catch (error) {
-            console.warn('Could not load styles for print:', error);
-        }
-        
-        // Get the current highlight.js theme CSS
-        try {
-            const highlightThemeLink = document.querySelector('link[data-highlight-theme]');
-            if (highlightThemeLink) {
-                const highlightResponse = await fetch(highlightThemeLink.href);
-                highlightStyles = await highlightResponse.text();
-            }
-        } catch (error) {
-            console.warn('Could not load highlight.js theme for print:', error);
-        }
-        
-        // Create print-specific styles by wrapping preview styles in @media print
-        printStyles = `
-            /* Base print layout */
-            body {
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                line-height: 1.6;
-                padding: 2rem;
-                color: var(--text-color);
-                background-color: var(--bg-color);
-                margin: 0;
-            }
-
-            /* Ensure proper theme inheritance */
-            * {
-                color: inherit;
-                background-color: inherit;
-            }
-
-            @media print {
-                /* Force browsers to print background colors */
-                body {
-                    padding: 1rem;
-                    color: var(--text-color) !important;
-                    background-color: var(--bg-color) !important;
-                    -webkit-print-color-adjust: exact !important;
-                    color-adjust: exact !important;
-                    print-color-adjust: exact !important;
-                }
-
-                /* Force all elements to preserve their theme colors */
-                *, *::before, *::after {
-                    -webkit-print-color-adjust: exact !important;
-                    color-adjust: exact !important;
-                    print-color-adjust: exact !important;
-                }
-
-                /* Hide copy buttons in print */
-                .copy-button {
-                    display: none !important;
-                }
-
-                /* Inject all preview styles into print media */
-                ${previewStyles}
-                /* Ensure highlight.js styles are applied */
-                
-            }
-        `;
-        
-        printWindow.document.write(`
-            <!DOCTYPE html>
-            <html data-theme="${currentTheme}">
-            <head>
-                <title>${notepadName}</title>
-                <style>
-                    /* Main application styles */
-                    ${mainStyles}
-                    
-                    /* Preview styles */
-                    ${previewStyles}
-                    
-                    /* Highlight.js theme styles */
-                    ${highlightStyles}
-                    
-                    /* Dynamic print styles with injected preview styles */
-                    ${printStyles}
-                </style>
-            </head>
-            <body>
-                <div id="preview-pane">
-                    ${formattedContent}
-                </div>
-            </body>
-            </html>
-        `);
-        
-        printWindow.document.close();
-        printWindow.focus();
-        
-        setTimeout(() => {
-            printWindow.print();
+            console.error('Error preparing print content:', error);
+            toaster.show('Error preparing print', 'error');
             printWindow.close();
-        }, 250);
-
-        toaster.show('Printing...');
+        }
     };
 
     const getNotepadIndexById = (id) => {
@@ -1054,7 +885,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         printNotepadBtn.addEventListener('click', () => {
             printNotepad();
         });
-        previewMarkdownBtn.addEventListener('click', () => toggleMarkdownPreview(true));
+        previewMarkdownBtn.addEventListener('click', () => previewManager.toggleMarkdownPreview(true));
 
         settingsButton.addEventListener('click', () => {
             settingsManager.loadSettings();
@@ -1171,8 +1002,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         themeToggle.addEventListener('click', () => {
             currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
             document.documentElement.setAttribute('data-theme', currentTheme);
-            updateHighlightTheme(currentTheme);
-            inheritEditorStyles(previewPane);
+            previewManager.updateHighlightTheme(currentTheme);
+            previewManager.inheritEditorStyles(previewManager.previewPane);
             storageManager.save(THEME_KEY, currentTheme);
         });
     }
@@ -1386,86 +1217,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     
     function applySettings(currentSettings) {
-        toggleMarkdownPreview(false, currentSettings.defaultMarkdownPreview, false);
+        previewManager.toggleMarkdownPreview(false, currentSettings.defaultMarkdownPreview, false);
     };
-
-    // Function to update highlight.js theme based on current app theme
-    function updateHighlightTheme(theme) {
-        // Remove any existing highlight.js theme
-        const existingTheme = document.querySelector('link[data-highlight-theme]');
-        if (existingTheme) {
-            existingTheme.remove();
-        }
-        
-        // Determine which theme CSS to load
-        const themeCss = theme === 'dark' 
-            ? '/css/@highlightjs/github-dark.min.css'
-            : '/css/@highlightjs/github.min.css';
-        
-        // Create and append new theme link
-        const link = document.createElement('link');
-        link.rel = 'stylesheet';
-        link.href = themeCss;
-        link.setAttribute('data-highlight-theme', theme);
-        document.head.appendChild(link);
-    }
-
-    async function initializeMarkdown(highlightLanguages = []) {
-        // Set initial highlight theme based on current theme
-        updateHighlightTheme(currentTheme);
-
-        // Register languages dynamically in parallel
-        if (highlightLanguages.length > 0) { 
-            try {
-                // Create array of import promises for parallel loading
-                const importPromises = highlightLanguages.map(async (lang) => {
-                    const langAlias = lang === 'html' ? 'xml' : lang; // Use 'xml' for HTML syntax highlighting
-                    try {
-                        const module = await import(`/js/@highlightjs/languages/${langAlias}.min.js`);
-                        if (module && module.default) {
-                            return { lang, module: module.default };
-                        }
-                    } catch (e) {
-                        console.warn(`Language module for ${langAlias} not found or invalid`);
-                    }
-                    return null;
-                });
-
-                // Wait for all imports to complete in parallel
-                const results = await Promise.all(importPromises);
-
-                // Register each successfully imported language
-                for (const result of results) {
-                    if (result) {
-                        hljs.registerLanguage(result.lang, result.module);
-                        // console.log(`Registered highlight.js language: ${result.lang}`);
-                    }
-                }
-            }
-            catch (error) {
-                console.warn('Error initializing highlight.js languages:', error);
-            }
-        }
-
-        marked.use(markedHighlight({
-            langPrefix: 'hljs language-',
-            highlight(code, lang) {
-                const language = hljs.getLanguage(lang) ? lang : '';
-                if (language) {
-                    return hljs.highlight(code, { language }).value;                    
-                }
-
-                // If no valid language, use auto-detection
-                return hljs.highlightAuto(code).value;
-            }
-        }));
-        marked.use(markedExtendedTables());
-        marked.use(markedAlert());
-        marked.setOptions({
-            breaks: true,
-            gfm: true
-        });
-    }
 
     const searchManager = new SearchManager(fetchWithPin, selectNotepad, closeAllModals);
 
@@ -1477,14 +1230,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         fetch(`/api/config`)
             .then(response => response.json())
-            .then(config => { // Load config and intialize markdown functionality
+            .then(config => { // Load config and initialize markdown functionality
                 if (config.error) throw new Error(config.error);
 
                 document.getElementById('page-title').textContent = `${config.siteTitle} - Simple Notes`;
                 document.getElementById('header-title').textContent = config.siteTitle;
                 
-                initializeMarkdown(config.highlightLanguages || [])
-                    .catch(error => console.warn(error))
+                return previewManager.initializeMarkdown(currentTheme, config.highlightLanguages || []);
             })
             .then(async () => { // Load notepads after config and markdown is initialized
                 await loadNotepads();
