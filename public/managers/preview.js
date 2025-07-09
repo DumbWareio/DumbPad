@@ -46,7 +46,10 @@ export class PreviewManager {
     /**
      * Render markdown content to the preview pane
      */
-    renderMarkdownPreview(content) {
+    async renderMarkdownPreview(content) {
+        // Load any additional languages that might be in the content
+        await this.loadAdditionalLanguages(content);
+        
         this.previewPane.innerHTML = this.marked.parse(content);
         this.addCopyLangButtonsToCodeBlocks();
     }
@@ -54,7 +57,7 @@ export class PreviewManager {
     /**
      * Toggle between edit and preview modes
      */
-    toggleMarkdownPreview(toggle, enable, enableStatusMessage = true) {
+    async toggleMarkdownPreview(toggle, enable, enableStatusMessage = true) {
         if (toggle) {
             this.isPreviewMode = !this.isPreviewMode;
         } else {
@@ -63,7 +66,7 @@ export class PreviewManager {
         
         if (this.isPreviewMode) {
             this.inheritEditorStyles(this.previewPane);
-            this.renderMarkdownPreview(this.editor.value);
+            await this.renderMarkdownPreview(this.editor.value);
             this.previewContainer.style.display = 'block';
             this.editorContainer.style.display = 'none';
             this.previewMarkdownBtn.classList.add('active');
@@ -129,8 +132,8 @@ export class PreviewManager {
             const codeElement = pre.querySelector('code');
             let language = 'text';
             if (codeElement && codeElement.className) {
-                // Look for hljs language- class pattern
-                const langMatch = codeElement.className.match(/language-(\w+)/);
+                // Look for hljs language- class pattern - support hyphens and other valid chars
+                const langMatch = codeElement.className.match(/language-([\w-]+)/);
                 if (langMatch) {
                     language = langMatch[1];
                 } else if (codeElement.className.includes('hljs')) {
@@ -219,7 +222,6 @@ export class PreviewManager {
             // Use requestAnimationFrame to ensure the button is fully rendered
             requestAnimationFrame(() => {
                 const buttonWidth = button.offsetWidth;
-                const buttonHeight = button.offsetHeight;
                 
                 // Only proceed if the button has been rendered (has dimensions)
                 if (buttonWidth > 0) {
@@ -231,6 +233,13 @@ export class PreviewManager {
                     
                     if (requiredMinWidth > currentMinWidth) {
                         pre.style.minWidth = `${requiredMinWidth}px`;
+                    }
+                } else {
+                    // Fallback if button dimensions aren't available
+                    // Use a reasonable minimum based on typical button sizes
+                    const fallbackMinWidth = parseInt(pre.style.minWidth) || 120;
+                    if (fallbackMinWidth < 120) {
+                        pre.style.minWidth = '120px';
                     }
                 }
             });
@@ -247,9 +256,9 @@ export class PreviewManager {
     /**
      * Update preview content if in preview mode
      */
-    updatePreviewIfActive(content) {
+    async updatePreviewIfActive(content) {
         if (this.isPreviewMode) {
-            this.renderMarkdownPreview(content);
+            await this.renderMarkdownPreview(content);
         }
     }
 
@@ -406,18 +415,28 @@ export class PreviewManager {
     /**
      * Initialize markdown parser with syntax highlighting and extensions
      */
-    async initializeMarkdown(currentTheme, highlightLanguages = []) {
+    async initializeMarkdown(currentTheme, markdownContent = '', defaultLanguages = ['javascript', 'python', 'css', 'html', 'json']) {
         // Set initial highlight theme based on current theme
         this.updateHighlightTheme(currentTheme);
 
         // Import hljs once for the entire method
         const { default: hljs } = await import('/js/@highlightjs/highlight.min.js');
 
-        // Register languages dynamically in parallel
-        if (highlightLanguages.length > 0) { 
+        // Detect languages in the markdown content
+        const detectedLanguages = new Set();
+        const codeBlockRegex = /```([\w-]+)/g;
+        let match;
+        while ((match = codeBlockRegex.exec(markdownContent)) !== null) {
+            detectedLanguages.add(match[1]);
+        }
+
+        // Use detected languages or fallback to default languages
+        const languagesToLoad = detectedLanguages.size > 0 ? Array.from(detectedLanguages) : defaultLanguages;
+
+        if (languagesToLoad.length > 0) {
             try {
                 // Create array of import promises for parallel loading
-                const importPromises = highlightLanguages.map(async (lang) => {
+                const importPromises = languagesToLoad.map(async (lang) => {
                     const langAlias = lang === 'html' ? 'xml' : lang; // Use 'xml' for HTML syntax highlighting
                     try {
                         const module = await import(`/js/@highlightjs/languages/${langAlias}.min.js`);
@@ -469,6 +488,61 @@ export class PreviewManager {
             breaks: true,
             gfm: true
         });
+    }
+
+    /**
+     * Dynamically load additional highlight.js languages based on content
+     * @param {string} markdownContent - The markdown content to scan for languages
+     */
+    async loadAdditionalLanguages(markdownContent) {
+        // Import hljs to check if we have it initialized
+        const { default: hljs } = await import('/js/@highlightjs/highlight.min.js');
+
+        // Detect languages in the new content
+        const detectedLanguages = new Set();
+        const codeBlockRegex = /```([\w-]+)/g;
+        let match;
+        while ((match = codeBlockRegex.exec(markdownContent)) !== null) {
+            detectedLanguages.add(match[1]);
+        }
+
+        // Filter out languages that are already registered
+        const languagesToLoad = Array.from(detectedLanguages).filter(lang => {
+            return !hljs.getLanguage(lang);
+        });
+
+        if (languagesToLoad.length > 0) {
+            if (this.DEBUG) console.log('Loading additional languages:', languagesToLoad);
+            
+            try {
+                // Create array of import promises for parallel loading
+                const importPromises = languagesToLoad.map(async (lang) => {
+                    const langAlias = lang === 'html' ? 'xml' : lang;
+                    try {
+                        const module = await import(`/js/@highlightjs/languages/${langAlias}.min.js`);
+                        if (module && module.default) {
+                            return { lang, module: module.default };
+                        }
+                    } catch (e) {
+                        console.warn(`Language module for ${langAlias} not found or invalid`);
+                    }
+                    return null;
+                });
+
+                // Wait for all imports to complete in parallel
+                const results = await Promise.all(importPromises);
+
+                // Register each successfully imported language
+                for (const result of results) {
+                    if (result) {
+                        hljs.registerLanguage(result.lang, result.module);
+                        if (this.DEBUG) console.log(`Registered additional highlight.js language: ${result.lang}`);
+                    }
+                }
+            } catch (error) {
+                console.warn('Error loading additional highlight.js languages:', error);
+            }
+        }
     }
 
     /**

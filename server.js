@@ -9,7 +9,7 @@ const WebSocket = require('ws');
 const Fuse = require('fuse.js');
 const { generatePWAManifest } = require("./scripts/pwa-manifest-generator")
 const { originValidationMiddleware, getCorsOptions, validateOrigin } = require('./scripts/cors');
-const { ALL_HIGHLIGHT_LANGUAGES } = require('./constants');
+const { ALL_HIGHLIGHT_LANGUAGES, getHighlightLanguages } = require('./constants');
 const HIGHLIGHT_LANGUAGES = process.env.HIGHLIGHT_LANGUAGES || ALL_HIGHLIGHT_LANGUAGES;
 
 const app = express();
@@ -71,7 +71,9 @@ app.use('/js/@highlightjs/highlight.min.js', express.static(
     path.join(__dirname, 'node_modules/@highlightjs/cdn-assets/es/highlight.min.js')
 ));
 // Dynamically serve highlight.js languages
-const highlightLanguages = HIGHLIGHT_LANGUAGES.split(',').map(lang => lang.trim());
+const highlightLanguages = process.env.HIGHLIGHT_LANGUAGES ? 
+    process.env.HIGHLIGHT_LANGUAGES.split(',').map(lang => lang.trim()) : 
+    getHighlightLanguages();
 highlightLanguages.forEach(lang => {
     if (lang) {
         app.use(`/js/@highlightjs/languages/${lang}.min.js`, express.static(
@@ -85,8 +87,10 @@ app.use('/css/@highlightjs/github-dark.min.css', express.static(
 app.use('/css/@highlightjs/github.min.css', express.static(
     path.join(__dirname, 'node_modules/@highlightjs/cdn-assets/styles/github.min.css')
 ));
-// ALL CSS THEMES 
-// TODO: may use to import all themes in the future
+
+// Future enhancement: Support for all highlight.js themes
+// Currently only serving light/dark GitHub themes for consistency
+// To enable all themes, uncomment the following line and update theme selection logic:
 // app.use('/css/@highlightjs', express.static(
 //     path.join(__dirname, 'node_modules/@highlightjs/cdn-assets/styles')
 // ));
@@ -499,7 +503,9 @@ app.get('/api/config', (req, res) => {
         siteTitle: SITE_TITLE,
         baseUrl: process.env.BASE_URL,
         version: VERSION,
-        highlightLanguages: HIGHLIGHT_LANGUAGES ? HIGHLIGHT_LANGUAGES.split(',').map(lang => lang.trim()) : [],
+        highlightLanguages: process.env.HIGHLIGHT_LANGUAGES ? 
+            process.env.HIGHLIGHT_LANGUAGES.split(',').map(lang => lang.trim()) : 
+            getHighlightLanguages(),
     });
 });
 

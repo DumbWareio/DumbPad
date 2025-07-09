@@ -31,6 +31,7 @@ code {
   padding: 2px 2px;
   border-radius: 5px;
   margin: 1.5rem 0;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 /* Code block styling */
@@ -45,6 +46,7 @@ code {
   box-sizing: border-box;
   position: relative;
   margin: 1.5rem 0;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 /* Language label with copy functionality for code blocks */
@@ -62,7 +64,8 @@ code {
   color: var(--text-color);
   cursor: pointer;
   opacity: 0.65;
-  transition: opacity 0.2s, background-color 0.2s;
+  transition: opacity 0.2s ease, background-color 0.3s ease, color 0.3s ease,
+    border-color 0.3s ease;
   z-index: 10;
   font-size: 0.65rem;
   font-family: monospace;
@@ -73,6 +76,7 @@ code {
   opacity: 1;
   background-color: var(--primary-color);
   color: white;
+  transition: opacity 0.2s ease, background-color 0.2s ease, color 0.2s ease;
 }
 
 #preview-pane pre .code-lang-copy-button:active {
@@ -90,7 +94,7 @@ code {
   width: 0;
   max-width: 0;
   overflow: hidden;
-  transition: opacity 0.2s, width 0.2s, max-width 0.2s;
+  transition: opacity 0.2s ease, width 0.2s ease, max-width 0.2s ease;
   display: flex;
   align-items: center;
 }
@@ -143,6 +147,7 @@ code {
   white-space: pre-wrap;
   max-width: 100%;
   word-break: break-word;
+  transition: color 0.3s ease;
 }
 
 /* Language label for code blocks */
@@ -165,10 +170,13 @@ code {
   user-select: none;
   min-width: 24px;
   text-align: center;
+  transition: opacity 0.2s ease, background-color 0.3s ease, color 0.3s ease,
+    border-color 0.3s ease;
 }
 
 #preview-pane pre:hover .language-label {
   opacity: 1;
+  transition: opacity 0.2s ease;
 }
 
 /* Reduce spacing below headers */

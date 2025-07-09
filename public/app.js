@@ -249,7 +249,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             
             if (previewManager.getPreviewMode()) {
                 // Update preview if in preview mode
-                previewManager.renderMarkdownPreview(data.content);
+                await previewManager.renderMarkdownPreview(data.content);
             }
         } catch (err) {
             console.error('Error loading notes:', err);
@@ -1236,7 +1236,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 document.getElementById('page-title').textContent = `${config.siteTitle} - Simple Notes`;
                 document.getElementById('header-title').textContent = config.siteTitle;
                 
-                return previewManager.initializeMarkdown(currentTheme, config.highlightLanguages || []);
+                return previewManager.initializeMarkdown(currentTheme, editor.value);
             })
             .then(async () => { // Load notepads after config and markdown is initialized
                 await loadNotepads();
