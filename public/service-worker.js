@@ -63,15 +63,15 @@ const installNewCache = async (version) => {
     ];
 
     // If needed, cache highlight.js languages dynamically
-    // const configData = await getConfig();
-    // const highlightLanguages = configData?.highlightLanguages;
-    // if (highlightLanguages) {
-    //   highlightLanguages.forEach(lang => {
-    //     if (lang.trim()) {
-    //       assetsToCache.push(`/js/@highlightjs/languages/${lang.trim()}.min.js`);
-    //     }
-    //   });
-    // }
+    const configData = await getConfig();
+    const highlightLanguages = configData?.highlightLanguages;
+    if (highlightLanguages) {
+      highlightLanguages.forEach(lang => {
+        if (lang.trim()) {
+          assetsToCache.push(`/js/@highlightjs/languages/${lang.trim()}.min.js`);
+        }
+      });
+    }
     
     console.log("Assets to cache:", { assetsToCache });
     await cache.addAll(assetsToCache);

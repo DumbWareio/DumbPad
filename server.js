@@ -9,8 +9,10 @@ const WebSocket = require('ws');
 const Fuse = require('fuse.js');
 const { generatePWAManifest } = require("./scripts/pwa-manifest-generator")
 const { originValidationMiddleware, getCorsOptions, validateOrigin } = require('./scripts/cors');
-const { ALL_HIGHLIGHT_LANGUAGES, getHighlightLanguages } = require('./constants');
-const HIGHLIGHT_LANGUAGES = process.env.HIGHLIGHT_LANGUAGES || ALL_HIGHLIGHT_LANGUAGES;
+const { getHighlightLanguages } = require('./constants');
+const HIGHLIGHT_LANGUAGES = process.env.HIGHLIGHT_LANGUAGES
+    ? process.env.HIGHLIGHT_LANGUAGES.split(',').map(lang => lang.trim())
+    : getHighlightLanguages();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -71,10 +73,7 @@ app.use('/js/@highlightjs/highlight.min.js', express.static(
     path.join(__dirname, 'node_modules/@highlightjs/cdn-assets/es/highlight.min.js')
 ));
 // Dynamically serve highlight.js languages
-const highlightLanguages = process.env.HIGHLIGHT_LANGUAGES ? 
-    process.env.HIGHLIGHT_LANGUAGES.split(',').map(lang => lang.trim()) : 
-    getHighlightLanguages();
-highlightLanguages.forEach(lang => {
+HIGHLIGHT_LANGUAGES.forEach(lang => {
     if (lang) {
         app.use(`/js/@highlightjs/languages/${lang}.min.js`, express.static(
             path.join(__dirname, 'node_modules/@highlightjs/cdn-assets/es/languages', `${lang}.min.js`)
@@ -503,9 +502,7 @@ app.get('/api/config', (req, res) => {
         siteTitle: SITE_TITLE,
         baseUrl: process.env.BASE_URL,
         version: VERSION,
-        highlightLanguages: process.env.HIGHLIGHT_LANGUAGES ? 
-            process.env.HIGHLIGHT_LANGUAGES.split(',').map(lang => lang.trim()) : 
-            getHighlightLanguages(),
+        highlightLanguages: HIGHLIGHT_LANGUAGES,
     });
 });
 

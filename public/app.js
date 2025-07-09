@@ -364,6 +364,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                         }));
                     }
                 }
+
+                collaborationManager.updateLocalCursor();
             }
         });
 
