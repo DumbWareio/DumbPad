@@ -13,7 +13,7 @@ A stupid simple, no auth (unless you want it!), modern notepad application with 
   </a> -->
 </p>
 
-![image](https://github.com/user-attachments/assets/baf945a8-327b-472a-abf9-bf03af6e7079)
+![dumbpad](https://github.com/user-attachments/assets/3d880a0b-bbee-4794-ae2a-1b7b79335dde)
 
 ## Table of Contents
 
