@@ -261,246 +261,216 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Helper function to handle tab indentation
     function handleTabIndentation(textarea, start, end, value) {
         isHandlingTabOperation = true;
-        
+        let blockStart, blockEnd, originalText, replacementText;
         if (start === end) {
             // No selection: insert two spaces at cursor position
-            // Use execCommand for better undo support
-            if (document.queryCommandSupported && document.queryCommandSupported('insertText')) {
-                document.execCommand('insertText', false, '  ');
-            } else {
-                // Fallback: manual insertion with collaboration support
-                textarea.setRangeText('  ', start, end, 'end');
-                
-                // Create operation for collaboration
-                const operation = operationsManager.createOperation(
-                    OperationType.INSERT,
-                    start,
-                    '  ',
-                    userId
-                );
-                collaborationManager.sendOperation(operation);
-            }
+            blockStart = start;
+            blockEnd = end;
+            originalText = '';
+            replacementText = '  ';
+            textarea.setRangeText('  ', start, end, 'end');
+            textarea.setSelectionRange(start + 2, start + 2);
         } else {
             // Selection: indent all selected lines
             const lines = value.split('\n');
             const startLine = value.substring(0, start).split('\n').length - 1;
             const endLine = value.substring(0, end).split('\n').length - 1;
-            
-            // Build the replacement text
-            let replacementText = '';
-            let currentPos = 0;
-            
             for (let i = startLine; i <= endLine; i++) {
-                if (i > startLine) replacementText += '\n';
-                replacementText += '  ' + lines[i];
+                lines[i] = '  ' + lines[i];
             }
-            
+            replacementText = lines.slice(startLine, endLine + 1).join('\n');
             // Find the actual start and end positions of the selected lines
-            const lineStartPos = value.lastIndexOf('\n', start - 1) + 1;
-            const lineEndPos = end === value.length ? value.length : 
-                (value.indexOf('\n', end) === -1 ? value.length : value.indexOf('\n', end));
-            
-            // Get the original text that will be replaced
-            const originalText = value.substring(lineStartPos, lineEndPos);
-            
-            // Use execCommand for better undo support
-            if (document.queryCommandSupported && document.queryCommandSupported('insertText')) {
-                textarea.setSelectionRange(lineStartPos, lineEndPos);
-                document.execCommand('insertText', false, replacementText);
-                
-                // Adjust selection to reflect the changes
-                const addedChars = (endLine - startLine + 1) * 2;
-                textarea.setSelectionRange(start + 2, end + addedChars);
-            } else {
-                // Fallback: manual replacement with collaboration support
-                textarea.value = value.substring(0, lineStartPos) + replacementText + value.substring(lineEndPos);
-                
-                // Adjust selection
-                const addedChars = (endLine - startLine + 1) * 2;
-                textarea.setSelectionRange(start + 2, end + addedChars);
-                
-                // Create operations for collaboration
-                if (originalText !== replacementText) {
-                    // Send delete operation for original text
-                    const deleteOperation = operationsManager.createOperation(
-                        OperationType.DELETE,
-                        lineStartPos,
-                        originalText,
-                        userId
-                    );
-                    collaborationManager.sendOperation(deleteOperation);
-                    
-                    // Send insert operation for new text
-                    const insertOperation = operationsManager.createOperation(
-                        OperationType.INSERT,
-                        lineStartPos,
-                        replacementText,
-                        userId
-                    );
-                    collaborationManager.sendOperation(insertOperation);
-                }
+            blockStart = value.lastIndexOf('\n', start - 1) + 1;
+            blockEnd = end === value.length ? value.length : (value.indexOf('\n', end) === -1 ? value.length : value.indexOf('\n', end));
+            originalText = value.substring(blockStart, blockEnd);
+            textarea.setSelectionRange(blockStart, blockEnd);
+            textarea.setRangeText(replacementText, blockStart, blockEnd, 'end');
+            // Adjust selection
+            const addedChars = (endLine - startLine + 1) * 2;
+            textarea.setSelectionRange(start + 2, end + addedChars);
+        }
+        // Send collaboration operations
+        if (originalText !== replacementText) {
+            if (originalText.length > 0) {
+                const deleteOp = operationsManager.createOperation(
+                    OperationType.DELETE,
+                    blockStart,
+                    originalText,
+                    userId
+                );
+                collaborationManager.sendOperation(deleteOp);
+            }
+            if (replacementText.length > 0) {
+                const insertOp = operationsManager.createOperation(
+                    OperationType.INSERT,
+                    blockStart,
+                    replacementText,
+                    userId
+                );
+                collaborationManager.sendOperation(insertOp);
             }
         }
-        
-        // Update previous editor value for change detection
         previousEditorValue = textarea.value;
-        
-        // Update preview if active
         previewManager.updatePreviewIfActive(textarea.value);
-        
-        // Save changes
         debouncedSave(textarea.value);
-        
-        // Clear the flag after a short delay to allow any pending events to be ignored
-        setTimeout(() => {
-            isHandlingTabOperation = false;
-        }, 50);
+        setTimeout(() => { isHandlingTabOperation = false; }, 50);
     }
 
     // Helper function to handle shift+tab (unindent)
     function handleShiftTabIndentation(textarea, start, end, value) {
         isHandlingTabOperation = true;
-        
+        let blockStart, blockEnd, originalText, replacementText;
         if (start === end) {
             // No selection: remove indentation from current line
             const lineStart = value.lastIndexOf('\n', start - 1) + 1;
             const lineEnd = value.indexOf('\n', start);
             const lineText = value.substring(lineStart, lineEnd === -1 ? value.length : lineEnd);
-            
             if (lineText.startsWith('  ')) {
-                // Calculate the actual positions
-                const actualLineEnd = lineEnd === -1 ? value.length : lineEnd;
-                const newLineText = lineText.substring(2);
-                const newText = newLineText;
-                
-                // Use execCommand for better undo support  
-                if (document.queryCommandSupported && document.queryCommandSupported('insertText')) {
-                    textarea.setSelectionRange(lineStart, actualLineEnd);
-                    document.execCommand('insertText', false, newText);
-                    
-                    // Adjust cursor position
-                    const newCursorPos = Math.max(lineStart, start - 2);
-                    textarea.setSelectionRange(newCursorPos, newCursorPos);
-                } else {
-                    // Fallback: manual replacement with collaboration support
-                    textarea.value = value.substring(0, lineStart) + newText + value.substring(actualLineEnd);
-                    
-                    // Adjust cursor position
-                    const newCursorPos = Math.max(lineStart, start - 2);
-                    textarea.setSelectionRange(newCursorPos, newCursorPos);
-                    
-                    // Create operations for collaboration
-                    const deleteOperation = operationsManager.createOperation(
+                blockStart = lineStart;
+                blockEnd = lineEnd === -1 ? value.length : lineEnd;
+                originalText = lineText;
+                replacementText = lineText.substring(2);
+                textarea.setSelectionRange(blockStart, blockEnd);
+                textarea.setRangeText(replacementText, blockStart, blockEnd, 'end');
+                // Adjust cursor position
+                const newCursorPos = Math.max(lineStart, start - 2);
+                textarea.setSelectionRange(newCursorPos, newCursorPos);
+                // Send collaboration operations
+                if (originalText.length > 0) {
+                    const deleteOp = operationsManager.createOperation(
                         OperationType.DELETE,
-                        lineStart,
-                        '  ',
+                        blockStart,
+                        originalText,
                         userId
                     );
-                    collaborationManager.sendOperation(deleteOperation);
+                    collaborationManager.sendOperation(deleteOp);
                 }
-                
-                // Update previous editor value for change detection
-                previousEditorValue = textarea.value;
-                
-                // Update preview if active
-                previewManager.updatePreviewIfActive(textarea.value);
-                
-                // Save changes
-                debouncedSave(textarea.value);
+                if (replacementText.length > 0) {
+                    const insertOp = operationsManager.createOperation(
+                        OperationType.INSERT,
+                        blockStart,
+                        replacementText,
+                        userId
+                    );
+                    collaborationManager.sendOperation(insertOp);
+                }
             }
         } else {
             // Selection: remove indentation from all selected lines
             const lines = value.split('\n');
             const startLine = value.substring(0, start).split('\n').length - 1;
             const endLine = value.substring(0, end).split('\n').length - 1;
-            
-            // Find lines that can be unindented
-            const linesToUnindent = [];
             for (let i = startLine; i <= endLine; i++) {
                 if (lines[i].startsWith('  ')) {
-                    linesToUnindent.push(i);
+                    lines[i] = lines[i].substring(2);
                 }
             }
-            
-            if (linesToUnindent.length > 0) {
-                // Build the replacement text
-                let replacementText = '';
-                for (let i = startLine; i <= endLine; i++) {
-                    if (i > startLine) replacementText += '\n';
-                    if (lines[i].startsWith('  ')) {
-                        replacementText += lines[i].substring(2);
-                    } else {
-                        replacementText += lines[i];
-                    }
-                }
-                
-                // Find the actual start and end positions of the selected lines
-                const lineStartPos = value.lastIndexOf('\n', start - 1) + 1;
-                const lineEndPos = end === value.length ? value.length : 
-                    (value.indexOf('\n', end) === -1 ? value.length : value.indexOf('\n', end));
-                
-                // Get the original text that will be replaced
-                const originalText = value.substring(lineStartPos, lineEndPos);
-                
-                // Use execCommand for better undo support
-                if (document.queryCommandSupported && document.queryCommandSupported('insertText')) {
-                    textarea.setSelectionRange(lineStartPos, lineEndPos);
-                    document.execCommand('insertText', false, replacementText);
-                    
-                    // Adjust selection
-                    const removedChars = linesToUnindent.length * 2;
-                    const removedFromStart = lines[startLine].startsWith('  ') ? 2 : 0;
-                    const newStart = Math.max(0, start - removedFromStart);
-                    const newEnd = Math.max(newStart, end - removedChars);
-                    textarea.setSelectionRange(newStart, newEnd);
-                } else {
-                    // Fallback: manual replacement with collaboration support
-                    textarea.value = value.substring(0, lineStartPos) + replacementText + value.substring(lineEndPos);
-                    
-                    // Adjust selection
-                    const removedChars = linesToUnindent.length * 2;
-                    const removedFromStart = lines[startLine].startsWith('  ') ? 2 : 0;
-                    const newStart = Math.max(0, start - removedFromStart);
-                    const newEnd = Math.max(newStart, end - removedChars);
-                    textarea.setSelectionRange(newStart, newEnd);
-                    
-                    // Create operations for collaboration
-                    if (originalText !== replacementText) {
-                        // Send delete operation for original text
-                        const deleteOperation = operationsManager.createOperation(
-                            OperationType.DELETE,
-                            lineStartPos,
-                            originalText,
-                            userId
-                        );
-                        collaborationManager.sendOperation(deleteOperation);
-                        
-                        // Send insert operation for new text
-                        const insertOperation = operationsManager.createOperation(
-                            OperationType.INSERT,
-                            lineStartPos,
-                            replacementText,
-                            userId
-                        );
-                        collaborationManager.sendOperation(insertOperation);
-                    }
-                }
-                
-                // Update previous editor value for change detection
-                previousEditorValue = textarea.value;
-                
-                // Update preview if active
-                previewManager.updatePreviewIfActive(textarea.value);
-                
-                // Save changes
-                debouncedSave(textarea.value);
+            replacementText = lines.slice(startLine, endLine + 1).join('\n');
+            blockStart = value.lastIndexOf('\n', start - 1) + 1;
+            blockEnd = end === value.length ? value.length : (value.indexOf('\n', end) === -1 ? value.length : value.indexOf('\n', end));
+            originalText = value.substring(blockStart, blockEnd);
+            textarea.setSelectionRange(blockStart, blockEnd);
+            textarea.setRangeText(replacementText, blockStart, blockEnd, 'end');
+            // Adjust selection
+            const removedChars = (endLine - startLine + 1) * 2;
+            const removedFromStart = lines[startLine].startsWith('  ') ? 2 : 0;
+            const newStart = Math.max(0, start - removedFromStart);
+            const newEnd = Math.max(newStart, end - removedChars);
+            textarea.setSelectionRange(newStart, newEnd);
+            // Send collaboration operations
+            if (originalText.length > 0) {
+                const deleteOp = operationsManager.createOperation(
+                    OperationType.DELETE,
+                    blockStart,
+                    originalText,
+                    userId
+                );
+                collaborationManager.sendOperation(deleteOp);
+            }
+            if (replacementText.length > 0) {
+                const insertOp = operationsManager.createOperation(
+                    OperationType.INSERT,
+                    blockStart,
+                    replacementText,
+                    userId
+                );
+                collaborationManager.sendOperation(insertOp);
             }
         }
-        
-        // Clear the flag after a short delay to allow any pending events to be ignored
-        setTimeout(() => {
-            isHandlingTabOperation = false;
-        }, 50);
+        previousEditorValue = textarea.value;
+        previewManager.updatePreviewIfActive(textarea.value);
+        debouncedSave(textarea.value);
+        setTimeout(() => { isHandlingTabOperation = false; }, 50);
+    }
+
+    let undoStack = [];
+    let redoStack = [];
+
+    // Helper to get inverse operation
+    function getInverseOperation(operation, value) {
+        if (operation.type === OperationType.INSERT) {
+            return {
+                ...operation,
+                type: OperationType.DELETE,
+                text: operation.text,
+                position: operation.position
+            };
+        } else if (operation.type === OperationType.DELETE) {
+            return {
+                ...operation,
+                type: OperationType.INSERT,
+                text: operation.text,
+                position: operation.position
+            };
+        }
+        return null;
+    }
+
+    // Apply operation and update undo/redo stacks
+    function applyLocalOperation(operation, isUndoRedo = false) {
+        // Apply operation to editor
+        editor.value = operationsManager.applyOperation(operation, editor.value);
+        previousEditorValue = editor.value;
+        previewManager.updatePreviewIfActive(editor.value);
+        debouncedSave(editor.value);
+        collaborationManager.sendOperation(operation);
+        if (!isUndoRedo) {
+            // Push inverse to undo stack
+            const inverse = getInverseOperation(operation, editor.value);
+            if (inverse) undoStack.push(inverse);
+            // Clear redo stack on new operation
+            redoStack = [];
+        }
+    }
+
+    // Undo handler
+    function handleUndo() {
+        if (undoStack.length === 0) return;
+        const operation = undoStack.pop();
+        // Apply the operation locally (undo)
+        editor.value = operationsManager.applyOperation(operation, editor.value);
+        previousEditorValue = editor.value;
+        previewManager.updatePreviewIfActive(editor.value);
+        debouncedSave(editor.value);
+        // Push inverse to redo stack
+        redoStack.push(getInverseOperation(operation, editor.value));
+        // Broadcast the actual operation being undone to remote users
+        collaborationManager.sendOperation(operation);
+    }
+
+    // Redo handler
+    function handleRedo() {
+        if (redoStack.length === 0) return;
+        const operation = redoStack.pop();
+        // Apply the operation locally (redo)
+        editor.value = operationsManager.applyOperation(operation, editor.value);
+        previousEditorValue = editor.value;
+        previewManager.updatePreviewIfActive(editor.value);
+        debouncedSave(editor.value);
+        // Push inverse to undo stack
+        undoStack.push(getInverseOperation(operation, editor.value));
+        // Broadcast the actual operation being redone to remote users
+        collaborationManager.sendOperation(operation);
     }
 
     function addEditorEventListeners() {
@@ -512,14 +482,25 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Handle tab/shift-tab indentation
         editor.addEventListener('keydown', (e) => {
+            // Intercept undo/redo
+            const isUndo = (e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z';
+            const isRedo = ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z')));
+            if (isUndo) {
+                e.preventDefault();
+                handleUndo();
+                return;
+            }
+            if (isRedo) {
+                e.preventDefault();
+                handleRedo();
+                return;
+            }
             if (e.key === 'Tab') {
                 e.preventDefault(); // Prevent default tab behavior (focus change)
-                
                 const textarea = e.target;
                 const start = textarea.selectionStart;
                 const end = textarea.selectionEnd;
                 const value = textarea.value;
-                
                 if (e.shiftKey) {
                     // Shift+Tab: Remove indentation
                     handleShiftTabIndentation(textarea, start, end, value);
@@ -527,7 +508,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                     // Tab: Add indentation
                     handleTabIndentation(textarea, start, end, value);
                 }
-
                 collaborationManager.updateLocalCursor();
             }
         });
@@ -538,93 +518,81 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (DEBUG) console.log('Ignoring input event during remote update');
                 return;
             }
-            
             // Skip input handling if we're in the middle of a tab operation
             if (isHandlingTabOperation) {
                 if (DEBUG) console.log('Ignoring input event during tab operation');
                 return;
             }
-    
             const target = e.target;
             const changeStart = target.selectionStart;
-            
             // Handle different types of input
             if (e.inputType.startsWith('delete')) {
-                // Calculate what was deleted by comparing with previous value
                 const lengthDiff = previousEditorValue.length - target.value.length;
-                
-                // For bulk deletions or continuous delete
                 if (lengthDiff > 0) {
                     let deletedContent;
                     let deletePosition;
-                    
                     if (e.inputType === 'deleteContentBackward') {
-                        // Backspace: deletion happens before cursor
                         deletePosition = changeStart;
                         deletedContent = previousEditorValue.substring(deletePosition, deletePosition + lengthDiff);
                     } else {
-                        // Delete key: deletion happens at cursor
                         deletePosition = changeStart;
                         deletedContent = previousEditorValue.substring(deletePosition, deletePosition + lengthDiff);
                     }
-                    
                     const operation = operationsManager.createOperation(
                         OperationType.DELETE,
                         deletePosition,
                         deletedContent,
                         userId
                     );
-                    if (DEBUG) console.log('Created DELETE operation:', operation);
+                    // Only send operation, do not apply locally (browser already did)
                     collaborationManager.sendOperation(operation);
+                    // Push inverse to undo stack
+                    const inverse = getInverseOperation(operation, target.value);
+                    if (inverse) undoStack.push(inverse);
+                    redoStack = [];
                 }
             } else {
-                // For insertions
                 let insertedText;
                 let insertPosition = changeStart;
-                
                 if (e.inputType === 'insertFromPaste') {
-                    // Handle paste operation
                     const selectionDiff = previousEditorValue.length - target.value.length + e.data.length;
-                    
-                    // If there was selected text that was replaced
                     if (selectionDiff > 0) {
-                        // First create a delete operation for the selected text
                         const deletePosition = changeStart - e.data.length;
                         const deletedContent = previousEditorValue.substring(deletePosition, deletePosition + selectionDiff);
-                        
                         const deleteOperation = operationsManager.createOperation(
                             OperationType.DELETE,
                             deletePosition,
                             deletedContent,
                             userId
                         );
-                        if (DEBUG) console.log('Created DELETE operation for paste:', deleteOperation);
                         collaborationManager.sendOperation(deleteOperation);
-                        
+                        // Push inverse to undo stack
+                        const inverse = getInverseOperation(deleteOperation, target.value);
+                        if (inverse) undoStack.push(inverse);
+                        redoStack = [];
                         insertPosition = deletePosition;
                     }
-                    
                     insertedText = e.data;
                 } else if (e.inputType === 'insertLineBreak') {
                     insertedText = '\n';
                 } else {
                     insertedText = e.data || target.value.substring(changeStart - 1, changeStart);
                 }
-                
                 const operation = operationsManager.createOperation(
                     OperationType.INSERT,
                     insertPosition - (e.inputType === 'insertFromPaste' ? 0 : insertedText.length),
                     insertedText,
                     userId
                 );
-                if (DEBUG) console.log('Created INSERT operation:', operation);
+                // Only send operation, do not apply locally (browser already did)
                 collaborationManager.sendOperation(operation);
+                // Push inverse to undo stack
+                const inverse = getInverseOperation(operation, target.value);
+                if (inverse) undoStack.push(inverse);
+                redoStack = [];
             }
-    
             previousEditorValue = target.value;
-            // Update markdown preview in real-time if in preview mode
             previewManager.updatePreviewIfActive(target.value);
-
             debouncedSave(target.value);
             collaborationManager.updateLocalCursor();
         });
