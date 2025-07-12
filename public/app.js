@@ -56,6 +56,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let previousEditorValue = editor.value;
     let currentNotepads = []; // Global array to hold current notepads list
     let isInitialLoad = true; // Track if this is the initial page load
+    let isHandlingTabOperation = false; // Flag to prevent input event interference with tab operations
 
     // Initialize managers
     const operationsManager = new OperationsManager();
@@ -66,6 +67,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let currentTheme =  storageManager.load(THEME_KEY);
     const settingsManager = new SettingsManager(storageManager, applySettings);
     const confirmationManager = new ConfirmationManager();
+    const searchManager = new SearchManager(fetchWithPin, selectNotepad, closeAllModals);
     
     // Initialize preview manager
     const previewManager = new PreviewManager({
@@ -139,7 +141,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     
     // Add credentials to all API requests
-    const fetchWithPin = async (url, options = {}) => {
+    async function fetchWithPin(url, options = {}) {
         options.credentials = 'same-origin';
         try {
             return fetch(url, options); 
@@ -151,7 +153,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
 
     // Copy current notepad link to clipboard
-    const copyCurrentNotepadLink = async () => {
+    async function copyCurrentNotepadLink() {
         try {
             const currentUrl = window.location.href;
             await navigator.clipboard.writeText(currentUrl);
@@ -256,7 +258,252 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     };
 
-    const addEditorEventListeners = () => {
+    // Helper function to handle tab indentation
+    function handleTabIndentation(textarea, start, end, value) {
+        isHandlingTabOperation = true;
+        
+        if (start === end) {
+            // No selection: insert two spaces at cursor position
+            // Use execCommand for better undo support
+            if (document.queryCommandSupported && document.queryCommandSupported('insertText')) {
+                document.execCommand('insertText', false, '  ');
+            } else {
+                // Fallback: manual insertion with collaboration support
+                textarea.setRangeText('  ', start, end, 'end');
+                
+                // Create operation for collaboration
+                const operation = operationsManager.createOperation(
+                    OperationType.INSERT,
+                    start,
+                    '  ',
+                    userId
+                );
+                collaborationManager.sendOperation(operation);
+            }
+        } else {
+            // Selection: indent all selected lines
+            const lines = value.split('\n');
+            const startLine = value.substring(0, start).split('\n').length - 1;
+            const endLine = value.substring(0, end).split('\n').length - 1;
+            
+            // Build the replacement text
+            let replacementText = '';
+            let currentPos = 0;
+            
+            for (let i = startLine; i <= endLine; i++) {
+                if (i > startLine) replacementText += '\n';
+                replacementText += '  ' + lines[i];
+            }
+            
+            // Find the actual start and end positions of the selected lines
+            const lineStartPos = value.lastIndexOf('\n', start - 1) + 1;
+            const lineEndPos = end === value.length ? value.length : 
+                (value.indexOf('\n', end) === -1 ? value.length : value.indexOf('\n', end));
+            
+            // Get the original text that will be replaced
+            const originalText = value.substring(lineStartPos, lineEndPos);
+            
+            // Use execCommand for better undo support
+            if (document.queryCommandSupported && document.queryCommandSupported('insertText')) {
+                textarea.setSelectionRange(lineStartPos, lineEndPos);
+                document.execCommand('insertText', false, replacementText);
+                
+                // Adjust selection to reflect the changes
+                const addedChars = (endLine - startLine + 1) * 2;
+                textarea.setSelectionRange(start + 2, end + addedChars);
+            } else {
+                // Fallback: manual replacement with collaboration support
+                textarea.value = value.substring(0, lineStartPos) + replacementText + value.substring(lineEndPos);
+                
+                // Adjust selection
+                const addedChars = (endLine - startLine + 1) * 2;
+                textarea.setSelectionRange(start + 2, end + addedChars);
+                
+                // Create operations for collaboration
+                if (originalText !== replacementText) {
+                    // Send delete operation for original text
+                    const deleteOperation = operationsManager.createOperation(
+                        OperationType.DELETE,
+                        lineStartPos,
+                        originalText,
+                        userId
+                    );
+                    collaborationManager.sendOperation(deleteOperation);
+                    
+                    // Send insert operation for new text
+                    const insertOperation = operationsManager.createOperation(
+                        OperationType.INSERT,
+                        lineStartPos,
+                        replacementText,
+                        userId
+                    );
+                    collaborationManager.sendOperation(insertOperation);
+                }
+            }
+        }
+        
+        // Update previous editor value for change detection
+        previousEditorValue = textarea.value;
+        
+        // Update preview if active
+        previewManager.updatePreviewIfActive(textarea.value);
+        
+        // Save changes
+        debouncedSave(textarea.value);
+        
+        // Clear the flag after a short delay to allow any pending events to be ignored
+        setTimeout(() => {
+            isHandlingTabOperation = false;
+        }, 50);
+    }
+
+    // Helper function to handle shift+tab (unindent)
+    function handleShiftTabIndentation(textarea, start, end, value) {
+        isHandlingTabOperation = true;
+        
+        if (start === end) {
+            // No selection: remove indentation from current line
+            const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+            const lineEnd = value.indexOf('\n', start);
+            const lineText = value.substring(lineStart, lineEnd === -1 ? value.length : lineEnd);
+            
+            if (lineText.startsWith('  ')) {
+                // Calculate the actual positions
+                const actualLineEnd = lineEnd === -1 ? value.length : lineEnd;
+                const newLineText = lineText.substring(2);
+                const newText = newLineText;
+                
+                // Use execCommand for better undo support  
+                if (document.queryCommandSupported && document.queryCommandSupported('insertText')) {
+                    textarea.setSelectionRange(lineStart, actualLineEnd);
+                    document.execCommand('insertText', false, newText);
+                    
+                    // Adjust cursor position
+                    const newCursorPos = Math.max(lineStart, start - 2);
+                    textarea.setSelectionRange(newCursorPos, newCursorPos);
+                } else {
+                    // Fallback: manual replacement with collaboration support
+                    textarea.value = value.substring(0, lineStart) + newText + value.substring(actualLineEnd);
+                    
+                    // Adjust cursor position
+                    const newCursorPos = Math.max(lineStart, start - 2);
+                    textarea.setSelectionRange(newCursorPos, newCursorPos);
+                    
+                    // Create operations for collaboration
+                    const deleteOperation = operationsManager.createOperation(
+                        OperationType.DELETE,
+                        lineStart,
+                        '  ',
+                        userId
+                    );
+                    collaborationManager.sendOperation(deleteOperation);
+                }
+                
+                // Update previous editor value for change detection
+                previousEditorValue = textarea.value;
+                
+                // Update preview if active
+                previewManager.updatePreviewIfActive(textarea.value);
+                
+                // Save changes
+                debouncedSave(textarea.value);
+            }
+        } else {
+            // Selection: remove indentation from all selected lines
+            const lines = value.split('\n');
+            const startLine = value.substring(0, start).split('\n').length - 1;
+            const endLine = value.substring(0, end).split('\n').length - 1;
+            
+            // Find lines that can be unindented
+            const linesToUnindent = [];
+            for (let i = startLine; i <= endLine; i++) {
+                if (lines[i].startsWith('  ')) {
+                    linesToUnindent.push(i);
+                }
+            }
+            
+            if (linesToUnindent.length > 0) {
+                // Build the replacement text
+                let replacementText = '';
+                for (let i = startLine; i <= endLine; i++) {
+                    if (i > startLine) replacementText += '\n';
+                    if (lines[i].startsWith('  ')) {
+                        replacementText += lines[i].substring(2);
+                    } else {
+                        replacementText += lines[i];
+                    }
+                }
+                
+                // Find the actual start and end positions of the selected lines
+                const lineStartPos = value.lastIndexOf('\n', start - 1) + 1;
+                const lineEndPos = end === value.length ? value.length : 
+                    (value.indexOf('\n', end) === -1 ? value.length : value.indexOf('\n', end));
+                
+                // Get the original text that will be replaced
+                const originalText = value.substring(lineStartPos, lineEndPos);
+                
+                // Use execCommand for better undo support
+                if (document.queryCommandSupported && document.queryCommandSupported('insertText')) {
+                    textarea.setSelectionRange(lineStartPos, lineEndPos);
+                    document.execCommand('insertText', false, replacementText);
+                    
+                    // Adjust selection
+                    const removedChars = linesToUnindent.length * 2;
+                    const removedFromStart = lines[startLine].startsWith('  ') ? 2 : 0;
+                    const newStart = Math.max(0, start - removedFromStart);
+                    const newEnd = Math.max(newStart, end - removedChars);
+                    textarea.setSelectionRange(newStart, newEnd);
+                } else {
+                    // Fallback: manual replacement with collaboration support
+                    textarea.value = value.substring(0, lineStartPos) + replacementText + value.substring(lineEndPos);
+                    
+                    // Adjust selection
+                    const removedChars = linesToUnindent.length * 2;
+                    const removedFromStart = lines[startLine].startsWith('  ') ? 2 : 0;
+                    const newStart = Math.max(0, start - removedFromStart);
+                    const newEnd = Math.max(newStart, end - removedChars);
+                    textarea.setSelectionRange(newStart, newEnd);
+                    
+                    // Create operations for collaboration
+                    if (originalText !== replacementText) {
+                        // Send delete operation for original text
+                        const deleteOperation = operationsManager.createOperation(
+                            OperationType.DELETE,
+                            lineStartPos,
+                            originalText,
+                            userId
+                        );
+                        collaborationManager.sendOperation(deleteOperation);
+                        
+                        // Send insert operation for new text
+                        const insertOperation = operationsManager.createOperation(
+                            OperationType.INSERT,
+                            lineStartPos,
+                            replacementText,
+                            userId
+                        );
+                        collaborationManager.sendOperation(insertOperation);
+                    }
+                }
+                
+                // Update previous editor value for change detection
+                previousEditorValue = textarea.value;
+                
+                // Update preview if active
+                previewManager.updatePreviewIfActive(textarea.value);
+                
+                // Save changes
+                debouncedSave(textarea.value);
+            }
+        }
+        
+        // Clear the flag after a short delay to allow any pending events to be ignored
+        setTimeout(() => {
+            isHandlingTabOperation = false;
+        }, 50);
+    }
+
+    function addEditorEventListeners() {
         // Track cursor position and selection
         editor.addEventListener('mouseup', () => collaborationManager.updateLocalCursor());
         editor.addEventListener('keyup', () => collaborationManager.updateLocalCursor());
@@ -275,94 +522,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 
                 if (e.shiftKey) {
                     // Shift+Tab: Remove indentation
-                    if (start === end) {
-                        // No selection: remove indentation from current line
-                        const lineStart = value.lastIndexOf('\n', start - 1) + 1;
-                        const lineText = value.substring(lineStart, value.indexOf('\n', start));
-                        
-                        if (lineText.startsWith('  ')) {
-                            // Remove two spaces from the beginning of the line
-                            const newValue = value.substring(0, lineStart) + 
-                                           lineText.substring(2) + 
-                                           value.substring(lineStart + lineText.length);
-                            
-                            textarea.value = newValue;
-                            // Adjust cursor position
-                            const newCursorPos = Math.max(lineStart, start - 2);
-                            textarea.setSelectionRange(newCursorPos, newCursorPos);
-                            
-                            // Trigger input event for collaboration
-                            textarea.dispatchEvent(new InputEvent('input', {
-                                inputType: 'deleteContent',
-                                data: null
-                            }));
-                        }
-                    } else {
-                        // Selection: remove indentation from all selected lines
-                        const lines = value.split('\n');
-                        const startLine = value.substring(0, start).split('\n').length - 1;
-                        const endLine = value.substring(0, end).split('\n').length - 1;
-                        
-                        let totalRemoved = 0;
-                        for (let i = startLine; i <= endLine; i++) {
-                            if (lines[i].startsWith('  ')) {
-                                lines[i] = lines[i].substring(2);
-                                totalRemoved += 2;
-                            }
-                        }
-                        
-                        if (totalRemoved > 0) {
-                            const newValue = lines.join('\n');
-                            textarea.value = newValue;
-                            
-                            // Adjust selection
-                            const newStart = Math.max(0, start - (startLine < endLine ? 0 : Math.min(2, totalRemoved)));
-                            const newEnd = Math.max(newStart, end - totalRemoved);
-                            textarea.setSelectionRange(newStart, newEnd);
-                            
-                            // Trigger input event for collaboration
-                            textarea.dispatchEvent(new InputEvent('input', {
-                                inputType: 'deleteContent',
-                                data: null
-                            }));
-                        }
-                    }
+                    handleShiftTabIndentation(textarea, start, end, value);
                 } else {
                     // Tab: Add indentation
-                    if (start === end) {
-                        // No selection: insert two spaces at cursor
-                        const newValue = value.substring(0, start) + '  ' + value.substring(end);
-                        textarea.value = newValue;
-                        textarea.setSelectionRange(start + 2, start + 2);
-                        
-                        // Trigger input event for collaboration
-                        textarea.dispatchEvent(new InputEvent('input', {
-                            inputType: 'insertText',
-                            data: '  '
-                        }));
-                    } else {
-                        // Selection: indent all selected lines
-                        const lines = value.split('\n');
-                        const startLine = value.substring(0, start).split('\n').length - 1;
-                        const endLine = value.substring(0, end).split('\n').length - 1;
-                        
-                        for (let i = startLine; i <= endLine; i++) {
-                            lines[i] = '  ' + lines[i];
-                        }
-                        
-                        const newValue = lines.join('\n');
-                        textarea.value = newValue;
-                        
-                        // Adjust selection
-                        const addedChars = (endLine - startLine + 1) * 2;
-                        textarea.setSelectionRange(start + 2, end + addedChars);
-                        
-                        // Trigger input event for collaboration
-                        textarea.dispatchEvent(new InputEvent('input', {
-                            inputType: 'insertText',
-                            data: '  '.repeat(endLine - startLine + 1)
-                        }));
-                    }
+                    handleTabIndentation(textarea, start, end, value);
                 }
 
                 collaborationManager.updateLocalCursor();
@@ -373,6 +536,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         editor.addEventListener('input', (e) => {
             if (collaborationManager.isReceivingUpdate) {
                 if (DEBUG) console.log('Ignoring input event during remote update');
+                return;
+            }
+            
+            // Skip input handling if we're in the middle of a tab operation
+            if (isHandlingTabOperation) {
+                if (DEBUG) console.log('Ignoring input event during tab operation');
                 return;
             }
     
@@ -492,7 +661,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     /* Notepad Controls */
     // Create new notepad
-    const createNotepad = async () => {
+    async function createNotepad() {
         try {
             const response = await fetchWithPin('/api/notepads', { method: 'POST' });
             const newNotepad = await response.json();
@@ -600,7 +769,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
 
     // Check if we should do a periodic save
-    const checkPeriodicSave = (content) => {
+    function checkPeriodicSave(content) {
         const now = Date.now();
         if (now - lastSaveTime >= SAVE_INTERVAL) {
             saveNotes(content, true);
@@ -608,7 +777,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
 
     // Debounced save
-    const debouncedSave = (content) => {
+    function debouncedSave(content) {
         clearTimeout(saveTimeout);
         saveTimeout = setTimeout(async () => {
             await saveNotes(content, true);
@@ -616,7 +785,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
 
     // Delete notepad
-    const deleteNotepad = async () => {
+    async function deleteNotepad() {
         try {
             if (currentNotepadId === 'default') {
                 toaster.show('Cannot delete the default notepad', 'error');
@@ -656,7 +825,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
 
     // Download file with specified extension
-    const downloadNotepad = (extension) => {
+    function downloadNotepad(extension) {
         const notepadName = notepadSelector.options[notepadSelector.selectedIndex].text;
         const content = editor.value;
         
@@ -681,7 +850,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
 
     // Print current notepad
-    const printNotepad = async () => {
+    async function printNotepad() {
         const notepadName = notepadSelector.options[notepadSelector.selectedIndex].text;
         const content = editor.value;
         const currentSettings = settingsManager.getSettings();
@@ -736,7 +905,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     };
 
-    const getNotepadIndexById = (id) => {
+    function getNotepadIndexById(id) {
         // Find the index of the option with the matching id
         const options = notepadSelector.options;
         let newIndex = -1; // Initialize to -1 (not found)
@@ -757,7 +926,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     /* IMPORTANT
     this loadNotes is async so this function must be awaited 
     or else autosave can overwrite other notepads with previous editor content */
-    const selectNotepad = async (id) => {
+    async function selectNotepad(id) {
         currentNotepadId = id;
         collaborationManager.currentNotepadId = currentNotepadId;
         await loadNotes(currentNotepadId);
@@ -772,7 +941,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    const getNextNotepadIndex = (forward = true) => {
+    function getNextNotepadIndex(forward = true) {
         const options = notepadSelector.options;
         const currentIndex = notepadSelector.selectedIndex;
         let newIndex;
@@ -784,32 +953,32 @@ document.addEventListener('DOMContentLoaded', async () => {
         return newIndex;
     }
 
-    const selectNextNotepad = async (forward = true) => {
+    async function selectNextNotepad(forward = true) {
         const newIndex = getNextNotepadIndex(forward);
         const notepadId = notepadSelector[newIndex].value;
         await selectNotepad(notepadId);
         return notepadId;
     }
 
-    const hideModal = (modal, toastMessage) => {
+    function hideModal(modal, toastMessage) {
         modal.classList.remove('visible');
         if (toastMessage) toaster.show(toastMessage);
         editor.focus();
     }
 
-    const showModal = (modal, inputToFocus) => {
+    function showModal(modal, inputToFocus) {
         closeAllModals() // close any open modals
         modal.classList.add('visible');
         if (inputToFocus) inputToFocus.focus();
     }
 
-    const closeAllModals = () => {
+    function closeAllModals() {
         const modals = document.querySelectorAll('.modal');
         if (modals) modals.forEach(m => hideModal(m));
         searchManager.closeModal();
     }
 
-    const addNotepadControlsEventListeners = () => {
+    function addNotepadControlsEventListeners() {
         copyLinkBtn.addEventListener('click', copyCurrentNotepadLink);
         
         notepadSelector.addEventListener('change', async (e) => {
@@ -918,7 +1087,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    const addShortcutEventListeners = () => {
+    function addShortcutEventListeners() {
         document.addEventListener('keydown', async (e) => {
             if (e.key === 'Escape') closeAllModals();
 
@@ -999,7 +1168,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    const addThemeEventListeners = () => {
+    function addThemeEventListeners() {
         // Theme toggle handler
         themeToggle.addEventListener('click', () => {
             currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
@@ -1010,7 +1179,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    const registerServiceWorker = async () => {
+    async function registerServiceWorker() {
         // Helper function to check service worker version
         const checkServiceWorkerVersion = async (currentAppVersion) => {
             if (navigator.serviceWorker.controller) {
@@ -1131,7 +1300,7 @@ document.addEventListener('DOMContentLoaded', async () => {
        }
     }
     
-    const addBrowserNavigationListener = () => {
+    function addBrowserNavigationListener() {
         // Handle browser back/forward buttons
         window.addEventListener('popstate', async (event) => {
             const urlParams = new URLSearchParams(window.location.search);
@@ -1159,7 +1328,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     };
 
-    const addEventListeners = () => {
+    function addEventListeners() {
         addThemeEventListeners();
         addEditorEventListeners();
         addNotepadControlsEventListeners();
@@ -1168,13 +1337,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         searchManager.addEventListeners();
     }
 
-    const detectOS = () => {
+    function detectOS() {
         const userAgent = navigator.userAgent;
         const isMac = /Macintosh|Mac OS X/i.test(userAgent);
         return isMac;
     }
 
-    const setupToolTips = () => {
+    function setupToolTips() {
         // Check if it's a mobile device using a media query or pointer query
         const isMobile = window.matchMedia('(max-width: 585px)').matches || window.matchMedia('(pointer: coarse)').matches;
         if (isMobile) return;
@@ -1221,8 +1390,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     function applySettings(currentSettings) {
         previewManager.toggleMarkdownPreview(false, currentSettings.defaultMarkdownPreview, false);
     };
-
-    const searchManager = new SearchManager(fetchWithPin, selectNotepad, closeAllModals);
 
     // Initialize the app
     const initializeApp = async () => {
