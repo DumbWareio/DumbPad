@@ -403,8 +403,53 @@ document.addEventListener('DOMContentLoaded', async () => {
         setTimeout(() => { isHandlingTabOperation = false; }, 50);
     }
 
-    let undoStack = [];
-    let redoStack = [];
+    // --- Session-based Undo/Redo per Notepad ---
+    // We store undo/redo history in sessionStorage per user AND per notepad.
+    // This ensures each client has its own independent undo/redo state for each notepad,
+    // which is crucial for collaborative editing across multiple notepads.
+    // Undo/redo actions are isolated to the user's session and specific notepad.
+    // This prevents accidentally undoing changes from a different notepad.
+    // --------------------------------
+
+    // Generate notepad-specific undo/redo stack keys
+    function getUndoStackKey(notepadId) {
+        return `undoStack_${userId}_${notepadId}`;
+    }
+
+    function getRedoStackKey(notepadId) {
+        return `redoStack_${userId}_${notepadId}`;
+    }
+
+    // Load undo/redo stacks from sessionStorage for specific notepad
+    function loadUndoStack(notepadId = currentNotepadId) {
+        try {
+            const stack = sessionStorage.getItem(getUndoStackKey(notepadId));
+            return stack ? JSON.parse(stack) : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function loadRedoStack(notepadId = currentNotepadId) {
+        try {
+            const stack = sessionStorage.getItem(getRedoStackKey(notepadId));
+            return stack ? JSON.parse(stack) : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function saveUndoStack(stack, notepadId = currentNotepadId) {
+        sessionStorage.setItem(getUndoStackKey(notepadId), JSON.stringify(stack));
+    }
+
+    function saveRedoStack(stack, notepadId = currentNotepadId) {
+        sessionStorage.setItem(getRedoStackKey(notepadId), JSON.stringify(stack));
+    }
+
+    // Initialize stacks per session and notepad
+    let undoStack = loadUndoStack();
+    let redoStack = loadRedoStack();
 
     // Helper to get inverse operation
     function getInverseOperation(operation, value) {
@@ -426,25 +471,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         return null;
     }
 
-    // Apply operation and update undo/redo stacks
-    function applyLocalOperation(operation, isUndoRedo = false) {
-        // Apply operation to editor
-        editor.value = operationsManager.applyOperation(operation, editor.value);
-        previousEditorValue = editor.value;
-        previewManager.updatePreviewIfActive(editor.value);
-        debouncedSave(editor.value);
-        collaborationManager.sendOperation(operation);
-        if (!isUndoRedo) {
-            // Push inverse to undo stack
-            const inverse = getInverseOperation(operation, editor.value);
-            if (inverse) undoStack.push(inverse);
-            // Clear redo stack on new operation
-            redoStack = [];
-        }
-    }
-
     // Undo handler
     function handleUndo() {
+        undoStack = loadUndoStack();
+        redoStack = loadRedoStack();
         if (undoStack.length === 0) return;
         const operation = undoStack.pop();
         // Apply the operation locally (undo)
@@ -453,13 +483,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         previewManager.updatePreviewIfActive(editor.value);
         debouncedSave(editor.value);
         // Push inverse to redo stack
-        redoStack.push(getInverseOperation(operation, editor.value));
+        const inverse = getInverseOperation(operation, editor.value);
+        if (inverse) {
+            redoStack.push(inverse);
+            saveRedoStack(redoStack);
+        }
+        saveUndoStack(undoStack);
         // Broadcast the actual operation being undone to remote users
         collaborationManager.sendOperation(operation);
     }
 
     // Redo handler
     function handleRedo() {
+        undoStack = loadUndoStack();
+        redoStack = loadRedoStack();
         if (redoStack.length === 0) return;
         const operation = redoStack.pop();
         // Apply the operation locally (redo)
@@ -468,7 +505,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         previewManager.updatePreviewIfActive(editor.value);
         debouncedSave(editor.value);
         // Push inverse to undo stack
-        undoStack.push(getInverseOperation(operation, editor.value));
+        const inverse = getInverseOperation(operation, editor.value);
+        if (inverse) {
+            undoStack.push(inverse);
+            saveUndoStack(undoStack);
+        }
+        saveRedoStack(redoStack);
         // Broadcast the actual operation being redone to remote users
         collaborationManager.sendOperation(operation);
     }
@@ -548,8 +590,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                     collaborationManager.sendOperation(operation);
                     // Push inverse to undo stack
                     const inverse = getInverseOperation(operation, target.value);
-                    if (inverse) undoStack.push(inverse);
+                    if (inverse) {
+                        undoStack.push(inverse);
+                        saveUndoStack(undoStack);
+                    }
                     redoStack = [];
+                    saveRedoStack(redoStack);
                 }
             } else {
                 let insertedText;
@@ -568,8 +614,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                         collaborationManager.sendOperation(deleteOperation);
                         // Push inverse to undo stack
                         const inverse = getInverseOperation(deleteOperation, target.value);
-                        if (inverse) undoStack.push(inverse);
+                        if (inverse) {
+                            undoStack.push(inverse);
+                            saveUndoStack(undoStack);
+                        }
                         redoStack = [];
+                        saveRedoStack(redoStack);
                         insertPosition = deletePosition;
                     }
                     insertedText = e.data;
@@ -588,8 +638,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 collaborationManager.sendOperation(operation);
                 // Push inverse to undo stack
                 const inverse = getInverseOperation(operation, target.value);
-                if (inverse) undoStack.push(inverse);
+                if (inverse) {
+                    undoStack.push(inverse);
+                    saveUndoStack(undoStack);
+                }
                 redoStack = [];
+                saveRedoStack(redoStack);
             }
             previousEditorValue = target.value;
             previewManager.updatePreviewIfActive(target.value);
@@ -639,6 +693,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             collaborationManager.currentNotepadId = currentNotepadId;
             editor.value = '';
             previousEditorValue = '';
+            
+            // Initialize fresh undo/redo stacks for new notepad
+            undoStack = [];
+            redoStack = [];
+            saveUndoStack(undoStack, currentNotepadId);
+            saveRedoStack(redoStack, currentNotepadId);
             
             // Clear preview if in preview mode
             if (previewManager.getPreviewMode()) {
@@ -898,6 +958,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         currentNotepadId = id;
         collaborationManager.currentNotepadId = currentNotepadId;
         await loadNotes(currentNotepadId);
+        
+        // Load undo/redo stacks for the selected notepad
+        undoStack = loadUndoStack(currentNotepadId);
+        redoStack = loadRedoStack(currentNotepadId);
+        
         editor.focus();
 
         notepadSelector.selectedIndex = getNotepadIndexById(id);
