@@ -13,7 +13,7 @@ A stupid simple, no auth (unless you want it!), modern notepad application with 
   </a> -->
 </p>
 
-![image](https://github.com/user-attachments/assets/baf945a8-327b-472a-abf9-bf03af6e7079)
+![dumbpad](https://github.com/user-attachments/assets/3d880a0b-bbee-4794-ae2a-1b7b79335dde)
 
 ## Table of Contents
 
@@ -44,6 +44,7 @@ A stupid simple, no auth (unless you want it!), modern notepad application with 
   - GitHub-style alert blocks (Note, Tip, Important, Warning, Caution)
   - Extended table formatting
   - Auto-expand collapsible details in print (configurable)
+  - Code syntax highlighting in `fenced codeblocks`
 - Direct notepad linking with URL parameters
 - Copy shareable notepad links
 - Browser navigation support (back/forward buttons)
@@ -246,6 +247,8 @@ Access settings via the gear icon (⚙️) in the header or use keyboard shortcu
 - marked: Markdown formatting
 - marked-alert: GitHub-style alert blocks for markdown
 - marked-extended-tables: Enhanced table support for markdown
+- marked-highlight: Syntax highlighting for code blocks in markdown
+- @highlightjs/cdn-assets: Highlight.js assets for code syntax highlighting
 - fuse.js: Fuzzy searching
 - ws: WebSocket support for real-time collaboration
 
@@ -314,6 +317,14 @@ Content that will be automatically expanded when printing
 </details>
 ```
 
+#### Code Syntax Highlighting
+
+````markdown
+```javascript
+console.log("Hello, world!");
+```
+````
+
 ### URL Parameters
 
 - **Direct notepad linking**: `?id=notepadname` - Opens a specific notepad by name (case-insensitive)
@@ -364,3 +375,7 @@ Made with ❤️ by DumbWare.io
 - Markdown code syntax highlighting
 
 > Got an idea? Open an issue or submit a PR
+
+```
+
+```

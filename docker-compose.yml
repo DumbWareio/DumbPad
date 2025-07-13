@@ -22,3 +22,8 @@ services:
       # MAX_ATTEMPTS: ${DUMBPAD_MAX_ATTEMPTS:-5} # Customize pin max attempts (if empty, defaults to 5)
       # COOKIE_MAX_AGE: ${DUMBPAD_COOKIE_MAX_AGE:-24} # Customize maximum age of cookies primarily used for pin verification (default 24) in hours
       # PAGE_HISTORY_COOKIE_AGE: ${DUMBPAD_PAGE_HISTORY_COOKIE_AGE:-365} # Customize age of cookie to show the last notepad opened (default 365 | max 400) in days - shows default notepad on load if expired
+      
+      # MARKDOWN CODE SYNTAX HIGHLIGHTING:
+      # By default, DumbPad includes support for all ~180 languages supported by highlight.js.
+      # view entire list and usage in /docs/MARKDOWN_SYNTAX_HIGHLIGHTING_USAGE.md
+      # HIGHLIGHT_LANGUAGES=c,csharp,css,dockerfile,go,html,java,javascript,json,kotlin,markdown,perl,php,python,ruby,sql,swift,typescript,xml,yaml

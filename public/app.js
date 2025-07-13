@@ -6,13 +6,11 @@ import SearchManager from './managers/search.js';
 import StorageManager from './managers/storage.js';
 import SettingsManager from './managers/settings.js'
 import ConfirmationManager from './managers/confirmation.js';
+import { PreviewManager } from './managers/preview.js';
 import { marked } from '/js/marked/marked.esm.js';
-import markedExtendedTables from '/js/marked-extended-tables/index.js';
-import markedAlert from '/js/marked-alert/index.js';
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     const DEBUG = false;
-    let isPreviewMode = false;
     const THEME_KEY = 'dumbpad_theme';
     let appSettings = {};
     const editorContainer = document.getElementById('editor-container');
@@ -58,6 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let previousEditorValue = editor.value;
     let currentNotepads = []; // Global array to hold current notepads list
     let isInitialLoad = true; // Track if this is the initial page load
+    let isHandlingTabOperation = false; // Flag to prevent input event interference with tab operations
 
     // Initialize managers
     const operationsManager = new OperationsManager();
@@ -68,6 +67,20 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentTheme =  storageManager.load(THEME_KEY);
     const settingsManager = new SettingsManager(storageManager, applySettings);
     const confirmationManager = new ConfirmationManager();
+    const searchManager = new SearchManager(fetchWithPin, selectNotepad, closeAllModals);
+    
+    // Initialize preview manager
+    const previewManager = new PreviewManager({
+        editor,
+        editorContainer,
+        previewContainer,
+        previewPane,
+        previewMarkdownBtn,
+        toaster,
+        collaborationManager: null, // Will be set after collaboration manager is created
+        marked
+    });
+    previewManager.DEBUG = DEBUG;
 
     // Generate user ID and color
     const userId = Math.random().toString(36).substring(2, 15);
@@ -91,10 +104,13 @@ document.addEventListener('DOMContentLoaded', () => {
         confirmationManager,
         saveNotes,
         renameNotepad,
-        addCopyButtonsToCodeBlocks: () => addCopyButtonsToCodeBlocks()
+        addCopyLangButtonsToCodeBlocks: () => previewManager.addCopyLangButtonsToCodeBlocks()
     });
     collaborationManager.DEBUG = DEBUG;
     collaborationManager.setupWebSocket(); // Initialize WebSocket connection immediately
+    
+    // Set collaboration manager reference in preview manager
+    previewManager.collaborationManager = collaborationManager;
 
     // Generate a deterministic color for the user based on their ID
     function getRandomColor(userId) {
@@ -125,7 +141,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // Add credentials to all API requests
-    const fetchWithPin = async (url, options = {}) => {
+    async function fetchWithPin(url, options = {}) {
         options.credentials = 'same-origin';
         try {
             return fetch(url, options); 
@@ -137,7 +153,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // Copy current notepad link to clipboard
-    const copyCurrentNotepadLink = async () => {
+    async function copyCurrentNotepadLink() {
         try {
             const currentUrl = window.location.href;
             await navigator.clipboard.writeText(currentUrl);
@@ -233,22 +249,310 @@ document.addEventListener('DOMContentLoaded', () => {
             previousEditorValue = data.content;
             editor.value = data.content;
             
-            if (isPreviewMode) {
+            if (previewManager.getPreviewMode()) {
                 // Update preview if in preview mode
-                previewPane.innerHTML = marked.parse(data.content);
-                addCopyButtonsToCodeBlocks(); // Add copy buttons after rendering
+                await previewManager.renderMarkdownPreview(data.content);
             }
         } catch (err) {
             console.error('Error loading notes:', err);
         }
     };
 
-    const addEditorEventListeners = () => {
+    // Helper function to handle tab indentation
+    function handleTabIndentation(textarea, start, end, value) {
+        isHandlingTabOperation = true;
+        let blockStart, blockEnd, originalText, replacementText;
+        if (start === end) {
+            // No selection: insert two spaces at cursor position
+            blockStart = start;
+            blockEnd = end;
+            originalText = '';
+            replacementText = '  ';
+            textarea.setRangeText('  ', start, end, 'end');
+            textarea.setSelectionRange(start + 2, start + 2);
+        } else {
+            // Selection: indent all selected lines
+            const lines = value.split('\n');
+            const startLine = value.substring(0, start).split('\n').length - 1;
+            const endLine = value.substring(0, end).split('\n').length - 1;
+            for (let i = startLine; i <= endLine; i++) {
+                lines[i] = '  ' + lines[i];
+            }
+            replacementText = lines.slice(startLine, endLine + 1).join('\n');
+            // Find the actual start and end positions of the selected lines
+            blockStart = value.lastIndexOf('\n', start - 1) + 1;
+            blockEnd = end === value.length ? value.length : (value.indexOf('\n', end) === -1 ? value.length : value.indexOf('\n', end));
+            originalText = value.substring(blockStart, blockEnd);
+            textarea.setSelectionRange(blockStart, blockEnd);
+            textarea.setRangeText(replacementText, blockStart, blockEnd, 'end');
+            // Adjust selection
+            const addedChars = (endLine - startLine + 1) * 2;
+            textarea.setSelectionRange(start + 2, end + addedChars);
+        }
+        // Send collaboration operations
+        if (originalText !== replacementText) {
+            if (originalText.length > 0) {
+                const deleteOp = operationsManager.createOperation(
+                    OperationType.DELETE,
+                    blockStart,
+                    originalText,
+                    userId
+                );
+                collaborationManager.sendOperation(deleteOp);
+            }
+            if (replacementText.length > 0) {
+                const insertOp = operationsManager.createOperation(
+                    OperationType.INSERT,
+                    blockStart,
+                    replacementText,
+                    userId
+                );
+                collaborationManager.sendOperation(insertOp);
+            }
+        }
+        previousEditorValue = textarea.value;
+        previewManager.updatePreviewIfActive(textarea.value);
+        debouncedSave(textarea.value);
+        setTimeout(() => { isHandlingTabOperation = false; }, 50);
+    }
+
+    // Helper function to handle shift+tab (unindent)
+    function handleShiftTabIndentation(textarea, start, end, value) {
+        isHandlingTabOperation = true;
+        let blockStart, blockEnd, originalText, replacementText;
+        if (start === end) {
+            // No selection: remove indentation from current line
+            const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+            const lineEnd = value.indexOf('\n', start);
+            const lineText = value.substring(lineStart, lineEnd === -1 ? value.length : lineEnd);
+            if (lineText.startsWith('  ')) {
+                blockStart = lineStart;
+                blockEnd = lineEnd === -1 ? value.length : lineEnd;
+                originalText = lineText;
+                replacementText = lineText.substring(2);
+                textarea.setSelectionRange(blockStart, blockEnd);
+                textarea.setRangeText(replacementText, blockStart, blockEnd, 'end');
+                // Adjust cursor position
+                const newCursorPos = Math.max(lineStart, start - 2);
+                textarea.setSelectionRange(newCursorPos, newCursorPos);
+                // Send collaboration operations
+                if (originalText.length > 0) {
+                    const deleteOp = operationsManager.createOperation(
+                        OperationType.DELETE,
+                        blockStart,
+                        originalText,
+                        userId
+                    );
+                    collaborationManager.sendOperation(deleteOp);
+                }
+                if (replacementText.length > 0) {
+                    const insertOp = operationsManager.createOperation(
+                        OperationType.INSERT,
+                        blockStart,
+                        replacementText,
+                        userId
+                    );
+                    collaborationManager.sendOperation(insertOp);
+                }
+            }
+        } else {
+            // Selection: remove indentation from all selected lines
+            const lines = value.split('\n');
+            const startLine = value.substring(0, start).split('\n').length - 1;
+            const endLine = value.substring(0, end).split('\n').length - 1;
+            for (let i = startLine; i <= endLine; i++) {
+                if (lines[i].startsWith('  ')) {
+                    lines[i] = lines[i].substring(2);
+                }
+            }
+            replacementText = lines.slice(startLine, endLine + 1).join('\n');
+            blockStart = value.lastIndexOf('\n', start - 1) + 1;
+            blockEnd = end === value.length ? value.length : (value.indexOf('\n', end) === -1 ? value.length : value.indexOf('\n', end));
+            originalText = value.substring(blockStart, blockEnd);
+            textarea.setSelectionRange(blockStart, blockEnd);
+            textarea.setRangeText(replacementText, blockStart, blockEnd, 'end');
+            // Adjust selection
+            const removedChars = (endLine - startLine + 1) * 2;
+            const removedFromStart = lines[startLine].startsWith('  ') ? 2 : 0;
+            const newStart = Math.max(0, start - removedFromStart);
+            const newEnd = Math.max(newStart, end - removedChars);
+            textarea.setSelectionRange(newStart, newEnd);
+            // Send collaboration operations
+            if (originalText.length > 0) {
+                const deleteOp = operationsManager.createOperation(
+                    OperationType.DELETE,
+                    blockStart,
+                    originalText,
+                    userId
+                );
+                collaborationManager.sendOperation(deleteOp);
+            }
+            if (replacementText.length > 0) {
+                const insertOp = operationsManager.createOperation(
+                    OperationType.INSERT,
+                    blockStart,
+                    replacementText,
+                    userId
+                );
+                collaborationManager.sendOperation(insertOp);
+            }
+        }
+        previousEditorValue = textarea.value;
+        previewManager.updatePreviewIfActive(textarea.value);
+        debouncedSave(textarea.value);
+        setTimeout(() => { isHandlingTabOperation = false; }, 50);
+    }
+
+    // --- Session-based Undo/Redo per Notepad ---
+    // We store undo/redo history in sessionStorage per user AND per notepad.
+    // This ensures each client has its own independent undo/redo state for each notepad,
+    // which is crucial for collaborative editing across multiple notepads.
+    // Undo/redo actions are isolated to the user's session and specific notepad.
+    // This prevents accidentally undoing changes from a different notepad.
+    // --------------------------------
+
+    // Generate notepad-specific undo/redo stack keys
+    function getUndoStackKey(notepadId) {
+        return `undoStack_${userId}_${notepadId}`;
+    }
+
+    function getRedoStackKey(notepadId) {
+        return `redoStack_${userId}_${notepadId}`;
+    }
+
+    // Load undo/redo stacks from sessionStorage for specific notepad
+    function loadUndoStack(notepadId = currentNotepadId) {
+        try {
+            const stack = sessionStorage.getItem(getUndoStackKey(notepadId));
+            return stack ? JSON.parse(stack) : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function loadRedoStack(notepadId = currentNotepadId) {
+        try {
+            const stack = sessionStorage.getItem(getRedoStackKey(notepadId));
+            return stack ? JSON.parse(stack) : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function saveUndoStack(stack, notepadId = currentNotepadId) {
+        sessionStorage.setItem(getUndoStackKey(notepadId), JSON.stringify(stack));
+    }
+
+    function saveRedoStack(stack, notepadId = currentNotepadId) {
+        sessionStorage.setItem(getRedoStackKey(notepadId), JSON.stringify(stack));
+    }
+
+    // Initialize stacks per session and notepad
+    let undoStack = loadUndoStack();
+    let redoStack = loadRedoStack();
+
+    // Helper to get inverse operation
+    function getInverseOperation(operation, value) {
+        if (operation.type === OperationType.INSERT) {
+            return {
+                ...operation,
+                type: OperationType.DELETE,
+                text: operation.text,
+                position: operation.position
+            };
+        } else if (operation.type === OperationType.DELETE) {
+            return {
+                ...operation,
+                type: OperationType.INSERT,
+                text: operation.text,
+                position: operation.position
+            };
+        }
+        return null;
+    }
+
+    // Undo handler
+    function handleUndo() {
+        undoStack = loadUndoStack();
+        redoStack = loadRedoStack();
+        if (undoStack.length === 0) return;
+        const operation = undoStack.pop();
+        // Apply the operation locally (undo)
+        editor.value = operationsManager.applyOperation(operation, editor.value);
+        previousEditorValue = editor.value;
+        previewManager.updatePreviewIfActive(editor.value);
+        debouncedSave(editor.value);
+        // Push inverse to redo stack
+        const inverse = getInverseOperation(operation, editor.value);
+        if (inverse) {
+            redoStack.push(inverse);
+            saveRedoStack(redoStack);
+        }
+        saveUndoStack(undoStack);
+        // Broadcast the actual operation being undone to remote users
+        collaborationManager.sendOperation(operation);
+    }
+
+    // Redo handler
+    function handleRedo() {
+        undoStack = loadUndoStack();
+        redoStack = loadRedoStack();
+        if (redoStack.length === 0) return;
+        const operation = redoStack.pop();
+        // Apply the operation locally (redo)
+        editor.value = operationsManager.applyOperation(operation, editor.value);
+        previousEditorValue = editor.value;
+        previewManager.updatePreviewIfActive(editor.value);
+        debouncedSave(editor.value);
+        // Push inverse to undo stack
+        const inverse = getInverseOperation(operation, editor.value);
+        if (inverse) {
+            undoStack.push(inverse);
+            saveUndoStack(undoStack);
+        }
+        saveRedoStack(redoStack);
+        // Broadcast the actual operation being redone to remote users
+        collaborationManager.sendOperation(operation);
+    }
+
+    function addEditorEventListeners() {
         // Track cursor position and selection
         editor.addEventListener('mouseup', () => collaborationManager.updateLocalCursor());
         editor.addEventListener('keyup', () => collaborationManager.updateLocalCursor());
         editor.addEventListener('click', () => collaborationManager.updateLocalCursor());
         editor.addEventListener('scroll', () => cursorManager.updateAllCursors());
+
+        // Handle tab/shift-tab indentation
+        editor.addEventListener('keydown', (e) => {
+            // Intercept undo/redo
+            const isUndo = (e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z';
+            const isRedo = ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z')));
+            if (isUndo) {
+                e.preventDefault();
+                handleUndo();
+                return;
+            }
+            if (isRedo) {
+                e.preventDefault();
+                handleRedo();
+                return;
+            }
+            if (e.key === 'Tab') {
+                e.preventDefault(); // Prevent default tab behavior (focus change)
+                const textarea = e.target;
+                const start = textarea.selectionStart;
+                const end = textarea.selectionEnd;
+                const value = textarea.value;
+                if (e.shiftKey) {
+                    // Shift+Tab: Remove indentation
+                    handleShiftTabIndentation(textarea, start, end, value);
+                } else {
+                    // Tab: Add indentation
+                    handleTabIndentation(textarea, start, end, value);
+                }
+                collaborationManager.updateLocalCursor();
+            }
+        });
 
         // Handle text input events
         editor.addEventListener('input', (e) => {
@@ -256,90 +560,93 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (DEBUG) console.log('Ignoring input event during remote update');
                 return;
             }
-    
+            // Skip input handling if we're in the middle of a tab operation
+            if (isHandlingTabOperation) {
+                if (DEBUG) console.log('Ignoring input event during tab operation');
+                return;
+            }
             const target = e.target;
             const changeStart = target.selectionStart;
-            
             // Handle different types of input
             if (e.inputType.startsWith('delete')) {
-                // Calculate what was deleted by comparing with previous value
                 const lengthDiff = previousEditorValue.length - target.value.length;
-                
-                // For bulk deletions or continuous delete
                 if (lengthDiff > 0) {
                     let deletedContent;
                     let deletePosition;
-                    
                     if (e.inputType === 'deleteContentBackward') {
-                        // Backspace: deletion happens before cursor
                         deletePosition = changeStart;
                         deletedContent = previousEditorValue.substring(deletePosition, deletePosition + lengthDiff);
                     } else {
-                        // Delete key: deletion happens at cursor
                         deletePosition = changeStart;
                         deletedContent = previousEditorValue.substring(deletePosition, deletePosition + lengthDiff);
                     }
-                    
                     const operation = operationsManager.createOperation(
                         OperationType.DELETE,
                         deletePosition,
                         deletedContent,
                         userId
                     );
-                    if (DEBUG) console.log('Created DELETE operation:', operation);
+                    // Only send operation, do not apply locally (browser already did)
                     collaborationManager.sendOperation(operation);
+                    // Push inverse to undo stack
+                    const inverse = getInverseOperation(operation, target.value);
+                    if (inverse) {
+                        undoStack.push(inverse);
+                        saveUndoStack(undoStack);
+                    }
+                    redoStack = [];
+                    saveRedoStack(redoStack);
                 }
             } else {
-                // For insertions
                 let insertedText;
                 let insertPosition = changeStart;
-                
                 if (e.inputType === 'insertFromPaste') {
-                    // Handle paste operation
                     const selectionDiff = previousEditorValue.length - target.value.length + e.data.length;
-                    
-                    // If there was selected text that was replaced
                     if (selectionDiff > 0) {
-                        // First create a delete operation for the selected text
                         const deletePosition = changeStart - e.data.length;
                         const deletedContent = previousEditorValue.substring(deletePosition, deletePosition + selectionDiff);
-                        
                         const deleteOperation = operationsManager.createOperation(
                             OperationType.DELETE,
                             deletePosition,
                             deletedContent,
                             userId
                         );
-                        if (DEBUG) console.log('Created DELETE operation for paste:', deleteOperation);
                         collaborationManager.sendOperation(deleteOperation);
-                        
+                        // Push inverse to undo stack
+                        const inverse = getInverseOperation(deleteOperation, target.value);
+                        if (inverse) {
+                            undoStack.push(inverse);
+                            saveUndoStack(undoStack);
+                        }
+                        redoStack = [];
+                        saveRedoStack(redoStack);
                         insertPosition = deletePosition;
                     }
-                    
                     insertedText = e.data;
                 } else if (e.inputType === 'insertLineBreak') {
                     insertedText = '\n';
                 } else {
                     insertedText = e.data || target.value.substring(changeStart - 1, changeStart);
                 }
-                
                 const operation = operationsManager.createOperation(
                     OperationType.INSERT,
                     insertPosition - (e.inputType === 'insertFromPaste' ? 0 : insertedText.length),
                     insertedText,
                     userId
                 );
-                if (DEBUG) console.log('Created INSERT operation:', operation);
+                // Only send operation, do not apply locally (browser already did)
                 collaborationManager.sendOperation(operation);
+                // Push inverse to undo stack
+                const inverse = getInverseOperation(operation, target.value);
+                if (inverse) {
+                    undoStack.push(inverse);
+                    saveUndoStack(undoStack);
+                }
+                redoStack = [];
+                saveRedoStack(redoStack);
             }
-    
             previousEditorValue = target.value;
-            // Update markdown preview in real-time if in preview mode
-            if (isPreviewMode) {
-                previewPane.innerHTML = marked.parse(target.value);
-                addCopyButtonsToCodeBlocks(); // Add copy buttons after rendering
-            }
-
+            previewManager.updatePreviewIfActive(target.value);
             debouncedSave(target.value);
             collaborationManager.updateLocalCursor();
         });
@@ -367,104 +674,16 @@ document.addEventListener('DOMContentLoaded', () => {
             }
     
             // Update markdown preview in real-time if in preview mode
-            if (isPreviewMode) {
-                previewPane.innerHTML = marked.parse(target.value);
-                addCopyButtonsToCodeBlocks(); // Add copy buttons after rendering
-            }
+            previewManager.updatePreviewIfActive(target.value);
         
             debouncedSave(target.value);
             collaborationManager.updateLocalCursor();
         });
     }
 
-    // Function to toggle between edit and preview modes
-    function toggleMarkdownPreview(toggle, enable, enableStatusMessage = true) {
-        if (toggle) isPreviewMode = !isPreviewMode;
-        else isPreviewMode = enable;
-         
-        if (isPreviewMode) {
-            // Render and show the markdown
-            inheritEditorStyles(previewPane);
-            previewPane.innerHTML = marked.parse(editor.value);
-            addCopyButtonsToCodeBlocks(); // Add copy buttons after rendering
-            previewContainer.style.display = 'block';
-            editorContainer.style.display = 'none';
-            previewMarkdownBtn.classList.add('active');
-            if (enableStatusMessage) toaster.show('Markdown Preview On', 'success');
-        } else {
-            previewContainer.style.display = 'none';
-            editorContainer.style.display = 'block';
-            previewMarkdownBtn.classList.remove('active');
-            editor.focus();
-            if (enableStatusMessage) toaster.show('Markdown Preview Off', 'error');
-        }
-
-        collaborationManager.updateLocalCursor();
-    }
-
-    function inheritEditorStyles(element) {
-        element.style.backgroundColor = window.getComputedStyle(editor).backgroundColor;
-        element.style.color = window.getComputedStyle(editor).color;
-        element.style.padding = window.getComputedStyle(editor).padding;
-    }
-
-    // Add copy buttons to code blocks
-    function addCopyButtonsToCodeBlocks() {
-        const codeBlocks = previewPane.querySelectorAll('pre');
-        
-        codeBlocks.forEach(pre => {
-            // Remove existing copy button if present
-            const existingButton = pre.querySelector('.copy-button');
-            if (existingButton) {
-                existingButton.remove();
-            }
-            
-            // Create copy button
-            const copyButton = document.createElement('button');
-            copyButton.className = 'copy-button';
-            copyButton.innerHTML = `
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                    <path d="M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z" />
-                    <path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" />
-                </svg>
-            `;
-            copyButton.setAttribute('aria-label', 'Copy to clipboard');
-            
-            // Add click handler
-            copyButton.addEventListener('click', async () => {
-                const codeElement = pre.querySelector('code');
-                const textToCopy = codeElement ? codeElement.textContent : pre.textContent;
-                
-                try {
-                    await navigator.clipboard.writeText(textToCopy);
-                    toaster.show('Copied to clipboard');
-                } catch (err) {
-                    // Fallback for older browsers
-                    const textArea = document.createElement('textarea');
-                    textArea.value = textToCopy;
-                    document.body.appendChild(textArea);
-                    textArea.select();
-                    
-                    try {
-                        document.execCommand('copy');
-                        toaster.show('Copied to clipboard');
-                    } catch (fallbackErr) {
-                        toaster.show('Failed to copy code', 'error');
-                    }
-                    
-                    document.body.removeChild(textArea);
-                }
-            });
-            
-            // Add button to the pre element
-            pre.appendChild(copyButton);
-        });
-    }
-
     /* Notepad Controls */
     // Create new notepad
-    const createNotepad = async () => {
+    async function createNotepad() {
         try {
             const response = await fetchWithPin('/api/notepads', { method: 'POST' });
             const newNotepad = await response.json();
@@ -475,9 +694,15 @@ document.addEventListener('DOMContentLoaded', () => {
             editor.value = '';
             previousEditorValue = '';
             
+            // Initialize fresh undo/redo stacks for new notepad
+            undoStack = [];
+            redoStack = [];
+            saveUndoStack(undoStack, currentNotepadId);
+            saveRedoStack(redoStack, currentNotepadId);
+            
             // Clear preview if in preview mode
-            if (isPreviewMode) {
-                previewPane.innerHTML = '';
+            if (previewManager.getPreviewMode()) {
+                previewManager.clearPreview();
             }
             
             // Update URL with new notepad name
@@ -572,7 +797,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // Check if we should do a periodic save
-    const checkPeriodicSave = (content) => {
+    function checkPeriodicSave(content) {
         const now = Date.now();
         if (now - lastSaveTime >= SAVE_INTERVAL) {
             saveNotes(content, true);
@@ -580,7 +805,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // Debounced save
-    const debouncedSave = (content) => {
+    function debouncedSave(content) {
         clearTimeout(saveTimeout);
         saveTimeout = setTimeout(async () => {
             await saveNotes(content, true);
@@ -588,7 +813,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // Delete notepad
-    const deleteNotepad = async () => {
+    async function deleteNotepad() {
         try {
             if (currentNotepadId === 'default') {
                 toaster.show('Cannot delete the default notepad', 'error');
@@ -628,7 +853,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // Download file with specified extension
-    const downloadNotepad = (extension) => {
+    function downloadNotepad(extension) {
         const notepadName = notepadSelector.options[notepadSelector.selectedIndex].text;
         const content = editor.value;
         
@@ -653,131 +878,62 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // Print current notepad
-    const printNotepad = async () => {
+    async function printNotepad() {
         const notepadName = notepadSelector.options[notepadSelector.selectedIndex].text;
         const content = editor.value;
+        const currentSettings = settingsManager.getSettings();
+        const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
         
         const printWindow = window.open('', '_blank');
 
-        let formattedContent = notepadName.toLowerCase().endsWith('.md') || isPreviewMode
-            ? marked.parse(content)
-            : content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
-        
-        // Auto-expand details elements for print by adding 'open' attribute
-        const currentSettings = settingsManager.getSettings();
-        if (formattedContent.includes('<details') && !currentSettings.disablePrintExpand) {
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = formattedContent;
-            
-            // Find all details elements and add the 'open' attribute
-            const detailsElements = tempDiv.querySelectorAll('details');
-            detailsElements.forEach(details => {
-                details.setAttribute('open', '');
-            });
-            
-            formattedContent = tempDiv.innerHTML;
-        }
-        
-        // Get current theme
-        const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
-        
-        // Load main and preview styles for print
-        let mainStyles = '';
-        let previewStyles = '';
-        let printStyles = '';
         try {
-            const [mainResponse, previewResponse] = await Promise.all([
-                fetch('Assets/styles.css'),
-                fetch('Assets/preview-styles.css')
-            ]);
-            mainStyles = await mainResponse.text();
-            previewStyles = await previewResponse.text();
+            const { formattedContent, mainStyles, previewStyles, highlightStyles, printStyles } = 
+                await previewManager.preparePrintContent(content, notepadName, currentSettings, currentTheme);
+            
+            printWindow.document.write(`
+                <!DOCTYPE html>
+                <html data-theme="${currentTheme}">
+                <head>
+                    <title>${notepadName}</title>
+                    <style>
+                        /* Main application styles */
+                        ${mainStyles}
+                        
+                        /* Preview styles */
+                        ${previewStyles}
+                        
+                        /* Highlight.js theme styles */
+                        ${highlightStyles}
+                        
+                        /* Dynamic print styles with injected preview styles */
+                        ${printStyles}
+                    </style>
+                </head>
+                <body>
+                    <div id="preview-pane">
+                        ${formattedContent}
+                    </div>
+                </body>
+                </html>
+            `);
+            
+            printWindow.document.close();
+            printWindow.focus();
+            
+            setTimeout(() => {
+                printWindow.print();
+                printWindow.close();
+            }, 250);
+
+            toaster.show('Printing...');
         } catch (error) {
-            console.warn('Could not load styles for print:', error);
-        }
-        
-        // Create print-specific styles by wrapping preview styles in @media print
-        printStyles = `
-            /* Base print layout */
-            body {
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                line-height: 1.6;
-                padding: 2rem;
-                color: var(--text-color);
-                background-color: var(--bg-color);
-                margin: 0;
-            }
-
-            /* Ensure proper theme inheritance */
-            * {
-                color: inherit;
-                background-color: inherit;
-            }
-
-            @media print {
-                /* Force browsers to print background colors */
-                body {
-                    padding: 1rem;
-                    color: var(--text-color) !important;
-                    background-color: var(--bg-color) !important;
-                    -webkit-print-color-adjust: exact !important;
-                    color-adjust: exact !important;
-                    print-color-adjust: exact !important;
-                }
-
-                /* Force all elements to preserve their theme colors */
-                *, *::before, *::after {
-                    -webkit-print-color-adjust: exact !important;
-                    color-adjust: exact !important;
-                    print-color-adjust: exact !important;
-                }
-
-                /* Hide copy buttons in print */
-                .copy-button {
-                    display: none !important;
-                }
-
-                /* Inject all preview styles into print media */
-                ${previewStyles}
-            }
-        `;
-        
-        printWindow.document.write(`
-            <!DOCTYPE html>
-            <html data-theme="${currentTheme}">
-            <head>
-                <title>${notepadName}</title>
-                <style>
-                    /* Main application styles */
-                    ${mainStyles}
-                    
-                    /* Preview styles */
-                    ${previewStyles}
-                    
-                    /* Dynamic print styles with injected preview styles */
-                    ${printStyles}
-                </style>
-            </head>
-            <body>
-                <div id="preview-pane">
-                    ${formattedContent}
-                </div>
-            </body>
-            </html>
-        `);
-        
-        printWindow.document.close();
-        printWindow.focus();
-        
-        setTimeout(() => {
-            printWindow.print();
+            console.error('Error preparing print content:', error);
+            toaster.show('Error preparing print', 'error');
             printWindow.close();
-        }, 250);
-
-        toaster.show('Printing...');
+        }
     };
 
-    const getNotepadIndexById = (id) => {
+    function getNotepadIndexById(id) {
         // Find the index of the option with the matching id
         const options = notepadSelector.options;
         let newIndex = -1; // Initialize to -1 (not found)
@@ -798,10 +954,15 @@ document.addEventListener('DOMContentLoaded', () => {
     /* IMPORTANT
     this loadNotes is async so this function must be awaited 
     or else autosave can overwrite other notepads with previous editor content */
-    const selectNotepad = async (id) => {
+    async function selectNotepad(id) {
         currentNotepadId = id;
         collaborationManager.currentNotepadId = currentNotepadId;
         await loadNotes(currentNotepadId);
+        
+        // Load undo/redo stacks for the selected notepad
+        undoStack = loadUndoStack(currentNotepadId);
+        redoStack = loadRedoStack(currentNotepadId);
+        
         editor.focus();
 
         notepadSelector.selectedIndex = getNotepadIndexById(id);
@@ -813,7 +974,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    const getNextNotepadIndex = (forward = true) => {
+    function getNextNotepadIndex(forward = true) {
         const options = notepadSelector.options;
         const currentIndex = notepadSelector.selectedIndex;
         let newIndex;
@@ -825,32 +986,32 @@ document.addEventListener('DOMContentLoaded', () => {
         return newIndex;
     }
 
-    const selectNextNotepad = async (forward = true) => {
+    async function selectNextNotepad(forward = true) {
         const newIndex = getNextNotepadIndex(forward);
         const notepadId = notepadSelector[newIndex].value;
         await selectNotepad(notepadId);
         return notepadId;
     }
 
-    const hideModal = (modal, toastMessage) => {
+    function hideModal(modal, toastMessage) {
         modal.classList.remove('visible');
         if (toastMessage) toaster.show(toastMessage);
         editor.focus();
     }
 
-    const showModal = (modal, inputToFocus) => {
+    function showModal(modal, inputToFocus) {
         closeAllModals() // close any open modals
         modal.classList.add('visible');
         if (inputToFocus) inputToFocus.focus();
     }
 
-    const closeAllModals = () => {
+    function closeAllModals() {
         const modals = document.querySelectorAll('.modal');
         if (modals) modals.forEach(m => hideModal(m));
         searchManager.closeModal();
     }
 
-    const addNotepadControlsEventListeners = () => {
+    function addNotepadControlsEventListeners() {
         copyLinkBtn.addEventListener('click', copyCurrentNotepadLink);
         
         notepadSelector.addEventListener('change', async (e) => {
@@ -928,7 +1089,7 @@ document.addEventListener('DOMContentLoaded', () => {
         printNotepadBtn.addEventListener('click', () => {
             printNotepad();
         });
-        previewMarkdownBtn.addEventListener('click', () => toggleMarkdownPreview(true));
+        previewMarkdownBtn.addEventListener('click', () => previewManager.toggleMarkdownPreview(true));
 
         settingsButton.addEventListener('click', () => {
             settingsManager.loadSettings();
@@ -959,7 +1120,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    const addShortcutEventListeners = () => {
+    function addShortcutEventListeners() {
         document.addEventListener('keydown', async (e) => {
             if (e.key === 'Escape') closeAllModals();
 
@@ -1040,17 +1201,18 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    const addThemeEventListeners = () => {
+    function addThemeEventListeners() {
         // Theme toggle handler
         themeToggle.addEventListener('click', () => {
             currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
             document.documentElement.setAttribute('data-theme', currentTheme);
-            inheritEditorStyles(previewPane);
+            previewManager.updateHighlightTheme(currentTheme);
+            previewManager.inheritEditorStyles(previewManager.previewPane);
             storageManager.save(THEME_KEY, currentTheme);
         });
     }
 
-    const registerServiceWorker = async () => {
+    async function registerServiceWorker() {
         // Helper function to check service worker version
         const checkServiceWorkerVersion = async (currentAppVersion) => {
             if (navigator.serviceWorker.controller) {
@@ -1171,7 +1333,7 @@ document.addEventListener('DOMContentLoaded', () => {
        }
     }
     
-    const addBrowserNavigationListener = () => {
+    function addBrowserNavigationListener() {
         // Handle browser back/forward buttons
         window.addEventListener('popstate', async (event) => {
             const urlParams = new URLSearchParams(window.location.search);
@@ -1199,7 +1361,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
-    const addEventListeners = () => {
+    function addEventListeners() {
         addThemeEventListeners();
         addEditorEventListeners();
         addNotepadControlsEventListeners();
@@ -1208,13 +1370,13 @@ document.addEventListener('DOMContentLoaded', () => {
         searchManager.addEventListeners();
     }
 
-    const detectOS = () => {
+    function detectOS() {
         const userAgent = navigator.userAgent;
         const isMac = /Macintosh|Mac OS X/i.test(userAgent);
         return isMac;
     }
 
-    const setupToolTips = () => {
+    function setupToolTips() {
         // Check if it's a mobile device using a media query or pointer query
         const isMobile = window.matchMedia('(max-width: 585px)').matches || window.matchMedia('(pointer: coarse)').matches;
         if (isMobile) return;
@@ -1259,60 +1421,45 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function applySettings(currentSettings) {
-        toggleMarkdownPreview(false, currentSettings.defaultMarkdownPreview, false);
+        previewManager.toggleMarkdownPreview(false, currentSettings.defaultMarkdownPreview, false);
     };
-
-    function initializeMarkDown() {
-        // Configure marked with extended tables support
-        marked.use(markedExtendedTables()); // Use marked-extended-tables for table support
-        marked.use(markedAlert()); // Use marked-alert for alert blocks
-        marked.setOptions({ // Set up markdown parser
-            breaks: true,
-            gfm: true
-        });
-    }
-
-    const searchManager = new SearchManager(fetchWithPin, selectNotepad, closeAllModals);
 
     // Initialize the app
     const initializeApp = async () => {
-        await registerServiceWorker();
-        initializeMarkDown();
         setupToolTips();
         addEventListeners();
+        appSettings = settingsManager.loadSettings();
 
         fetch(`/api/config`)
             .then(response => response.json())
-            .then(config => {
+            .then(config => { // Load config and initialize markdown functionality
                 if (config.error) throw new Error(config.error);
 
                 document.getElementById('page-title').textContent = `${config.siteTitle} - Simple Notes`;
                 document.getElementById('header-title').textContent = config.siteTitle;
-
-                loadNotepads().then(() => {
-                    loadNotes(currentNotepadId).then(() => {
-                        // Update URL with current notepad name if no query param was present
-                        const urlParams = new URLSearchParams(window.location.search);
-                        if (!urlParams.has('id') && currentNotepads.length > 0) {
-                            const currentNotepad = currentNotepads.find(np => np.id === currentNotepadId);
-                            if (currentNotepad) {
-                                updateUrlWithNotepad(currentNotepad.name);
-                            }
-                        }
-                    });
-                    // Mark initial load as complete after first load
-                    isInitialLoad = false;
-                });
+                
+                return previewManager.initializeMarkdown(currentTheme, editor.value);
+            })
+            .then(async () => { // Load notepads after config and markdown is initialized
+                await loadNotepads();
+                await loadNotes(currentNotepadId);
+                const urlParams = new URLSearchParams(window.location.search);
+                if (!urlParams.has('id') && currentNotepads.length > 0) {
+                    const currentNotepad = currentNotepads.find(np => np.id === currentNotepadId);
+                    if (currentNotepad) updateUrlWithNotepad(currentNotepad.name);
+                }
+            })
+            .finally(() => {
+                isInitialLoad = false;
             })
             .catch(err => {
                 console.error('Error loading site configuration:', err);
                 toaster.show(err, "error", true);
             });
         
-        appSettings = settingsManager.loadSettings();
         applySettings(appSettings);
+        await registerServiceWorker();
     };
-
 
     // Start the app
     initializeApp();

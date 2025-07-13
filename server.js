@@ -9,6 +9,10 @@ const WebSocket = require('ws');
 const Fuse = require('fuse.js');
 const { generatePWAManifest } = require("./scripts/pwa-manifest-generator")
 const { originValidationMiddleware, getCorsOptions, validateOrigin } = require('./scripts/cors');
+const { getHighlightLanguages } = require('./constants');
+const HIGHLIGHT_LANGUAGES = process.env.HIGHLIGHT_LANGUAGES
+    ? process.env.HIGHLIGHT_LANGUAGES.split(',').map(lang => lang.trim())
+    : getHighlightLanguages();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -26,6 +30,7 @@ const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const PAGE_HISTORY_COOKIE = 'dumbpad_page_history';
 const PAGE_HISTORY_COOKIE_AGE = process.env.PAGE_HISTORY_COOKIE_AGE || 365; // defaults to 1 Year in days
 const pageHistoryCookieAge = PAGE_HISTORY_COOKIE_AGE * 24 * 60 * 60 * 1000;
+
 let notepads_cache = {
     notepads: [],
     index: null,
@@ -50,7 +55,8 @@ const corsOptions = getCorsOptions(BASE_URL);
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(cookieParser());
-// Serve the marked library to clients
+
+// Serve static files
 app.use('/js/marked', express.static(
     path.join(__dirname, 'node_modules/marked/lib')
 ));
@@ -60,6 +66,34 @@ app.use('/js/marked-extended-tables', express.static(
 app.use('/js/marked-alert', express.static(
     path.join(__dirname, 'node_modules/marked-alert/dist')
 ));
+app.use('/js/marked-highlight', express.static(
+    path.join(__dirname, 'node_modules/marked-highlight/src')
+));
+app.use('/js/@highlightjs/highlight.min.js', express.static(
+    path.join(__dirname, 'node_modules/@highlightjs/cdn-assets/es/highlight.min.js')
+));
+// Dynamically serve highlight.js languages
+HIGHLIGHT_LANGUAGES.forEach(lang => {
+    if (lang) {
+        app.use(`/js/@highlightjs/languages/${lang}.min.js`, express.static(
+            path.join(__dirname, 'node_modules/@highlightjs/cdn-assets/es/languages', `${lang}.min.js`)
+        ));
+    }
+});
+app.use('/css/@highlightjs/github-dark.min.css', express.static(
+    path.join(__dirname, 'node_modules/@highlightjs/cdn-assets/styles/github-dark.min.css')
+));
+app.use('/css/@highlightjs/github.min.css', express.static(
+    path.join(__dirname, 'node_modules/@highlightjs/cdn-assets/styles/github.min.css')
+));
+
+// Future enhancement: Support for all highlight.js themes
+// Currently only serving light/dark GitHub themes for consistency
+// To enable all themes, uncomment the following line and update theme selection logic:
+// app.use('/css/@highlightjs', express.static(
+//     path.join(__dirname, 'node_modules/@highlightjs/cdn-assets/styles')
+// ));
+
 
 generatePWAManifest(SITE_TITLE);
 
@@ -468,6 +502,7 @@ app.get('/api/config', (req, res) => {
         siteTitle: SITE_TITLE,
         baseUrl: process.env.BASE_URL,
         version: VERSION,
+        highlightLanguages: HIGHLIGHT_LANGUAGES,
     });
 });
 
