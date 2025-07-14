@@ -231,7 +231,7 @@ main {
 .resize-handle {
     width: 8px;
     background-color: var(--secondary-color);
-    cursor: col-resize;
+    cursor: ew-resize;
     position: relative;
     user-select: none;
     transition: background-color 0.2s ease;
@@ -239,7 +239,6 @@ main {
     align-items: center;
     justify-content: center;
     z-index: 10;
-    cursor: ew-resize;
 }
 
 .resize-handle:hover {
