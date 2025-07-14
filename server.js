@@ -10,6 +10,12 @@ const Fuse = require('fuse.js');
 const { generatePWAManifest } = require("./scripts/pwa-manifest-generator")
 const { originValidationMiddleware, getCorsOptions, validateOrigin } = require('./scripts/cors');
 const { getHighlightLanguages } = require('./constants');
+const { 
+    sanitizeFilename, 
+    getNotepadFilePath, 
+    migrateAllNotepadsToNameBasedFiles, 
+    migrateDefaultNotepad 
+} = require('./scripts/notepad-migration');
 const HIGHLIGHT_LANGUAGES = process.env.HIGHLIGHT_LANGUAGES
     ? process.env.HIGHLIGHT_LANGUAGES.split(',').map(lang => lang.trim())
     : getHighlightLanguages();
@@ -30,6 +36,7 @@ const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const PAGE_HISTORY_COOKIE = 'dumbpad_page_history';
 const PAGE_HISTORY_COOKIE_AGE = process.env.PAGE_HISTORY_COOKIE_AGE || 365; // defaults to 1 Year in days
 const pageHistoryCookieAge = PAGE_HISTORY_COOKIE_AGE * 24 * 60 * 60 * 1000;
+const MAX_FILENAME_COLLISION_ATTEMPTS = 100; // Maximum attempts to resolve filename collisions
 
 let notepads_cache = {
     notepads: [],
@@ -558,12 +565,7 @@ async function ensureDataDir() {
         }
 
         // Ensure default notepad file exists
-        const defaultNotePath = path.join(DATA_DIR, 'default.txt');
-        try {
-            await fs.access(defaultNotePath);
-        } catch {
-            await fs.writeFile(defaultNotePath, '');
-        }
+        await migrateDefaultNotepad(DATA_DIR);
     } catch (err) {
         console.error('Error initializing data directory:', err);
         throw err;
@@ -595,8 +597,23 @@ async function getNotepadsFromDir() {
         .filter(file => file.endsWith('.txt'))
         .map(file => path.parse(file).name); // Extract filename without extension
 
-    const newNotepads = txtFiles.filter(txtFile => !notepads.some(notepad => notepad.id === txtFile))
-        .map(txtFile => ({ id: txtFile, name: txtFile }));
+    // Find new files that don't match existing notepad IDs or sanitized names
+    const newNotepads = txtFiles.filter(txtFile => {
+        // Check if this file matches any existing notepad by ID
+        const matchesId = notepads.some(notepad => notepad.id === txtFile);
+        
+        // Check if this file matches any existing notepad by sanitized name
+        const matchesSanitizedName = notepads.some(notepad => {
+            const sanitizedName = sanitizeFilename(notepad.name);
+            return sanitizedName === txtFile;
+        });
+        
+        return !matchesId && !matchesSanitizedName;
+    }).map(txtFile => {
+        // Generate a unique name that doesn't conflict with existing notepads or default
+        const uniqueName = generateUniqueName(txtFile, notepads);
+        return { id: txtFile, name: uniqueName };
+    });
 
     if (newNotepads.length > 0) {
         notepadsData.notepads = [...notepads, ...newNotepads];
@@ -613,10 +630,10 @@ async function indexNotepads() {
     console.log("Indexing notepads...");
     notepads_cache.notepads = await loadNotepadsList();
 
-    let items = await Promise.all(notepads_cache.notepads.map(async ({ id, name }) => {
+    let items = await Promise.all(notepads_cache.notepads.map(async (notepad) => {
         let content = "";
-        // console.log("id: ", id, "name:", name);
-        let filePath = path.join(DATA_DIR, `${id}.txt`);
+        // console.log("id: ", notepad.id, "name:", notepad.name);
+        let filePath = await getNotepadFilePath(notepad, DATA_DIR);
         try {
             await fs.access(filePath); // Ensure file exists
             content = await fs.readFile(filePath, 'utf8');
@@ -624,7 +641,7 @@ async function indexNotepads() {
             console.warn(`Could not read file: ${filePath}`);
         }
 
-        return { id, name, content };
+        return { id: notepad.id, name: notepad.name, content };
     }));
     
     notepads_cache.index = new Fuse(items, { 
@@ -637,6 +654,7 @@ async function indexNotepads() {
     });
 
     // console.log(notepads_cache); // uncomment to debug
+    console.log("Indexing complete. Notepads indexed:", notepads_cache.notepads.length);
 }
 
 // Helper function to generate unique notepad name
@@ -644,8 +662,9 @@ function generateUniqueName(desiredName, existingNotepads) {
     let uniqueName = desiredName;
     let counter = 1;
     
-    // Check if name already exists
-    while (existingNotepads.some(notepad => notepad.name === uniqueName)) {
+    // Check if name already exists or if sanitized name would conflict with default.txt
+    while (existingNotepads.some(notepad => notepad.name === uniqueName) || 
+           sanitizeFilename(uniqueName).toLowerCase() === 'default') {
         uniqueName = `${desiredName}-${counter}`;
         counter++;
     }
@@ -714,8 +733,15 @@ fs.watch(DATA_DIR, (eventType, filename) => {
 });
 fs.watch(NOTEPADS_FILE, () => indexNotepads());
 
-// Initial indexing
-indexNotepads();
+// Migrate existing ID-based files to name-based files
+(async () => {
+    console.log('Checking for notepad files to migrate...');
+    const notepads = await loadNotepadsList();
+    await migrateAllNotepadsToNameBasedFiles(notepads, DATA_DIR);
+    
+    // Initial indexing after migration is complete
+    indexNotepads();
+})();
 
 /* API Endpoints */
 // Get list of notepads
@@ -753,7 +779,12 @@ app.post('/api/notepads', async (req, res) => {
         });
 
         await fs.writeFile(NOTEPADS_FILE, JSON.stringify(data));
-        await fs.writeFile(path.join(DATA_DIR, `${id}.txt`), '');
+        
+        // Create file using sanitized name instead of ID
+        const sanitizedName = sanitizeFilename(uniqueName);
+        const filePath = path.join(DATA_DIR, `${sanitizedName}.txt`);
+        await fs.writeFile(filePath, '');
+        
         indexNotepads(); // update searching index
         res.json(newNotepad);
     } catch (err) {
@@ -766,8 +797,7 @@ app.put('/api/notepads/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const { name } = req.body;
-        const data = JSON.parse(await fs.readFile(NOTEPADS_FILE, 'utf8'));
-        const notepad = data.notepads.find(n => n.id === id);
+        const { data, notepad } = await findNotepadById(id);
         if (!notepad) {
             return res.status(404).json({ error: 'Notepad not found' });
         }
@@ -775,6 +805,56 @@ app.put('/api/notepads/:id', async (req, res) => {
         // Generate unique name (excluding current notepad from check)
         const otherNotepads = data.notepads.filter(n => n.id !== id);
         const uniqueName = generateUniqueName(name, otherNotepads);
+        
+        // Get current file path and prepare new file path
+        const currentFilePath = await getNotepadFilePath(notepad, DATA_DIR);
+        const sanitizedNewName = sanitizeFilename(uniqueName);
+        let newFilePath = path.join(DATA_DIR, `${sanitizedNewName}.txt`);
+        
+        // Skip file renaming for default notepad - it should always remain default.txt
+        const shouldRenameFile = id !== 'default' && notepad.name !== uniqueName && currentFilePath !== newFilePath;
+        
+        // Rename the file if needed (but skip for default notepad)
+        if (shouldRenameFile) {
+            try {
+                // Check if new path already exists
+                try {
+                    await fs.access(newFilePath);
+                    // File exists, we need to generate a different filename
+                    let counter = 1;
+                    let altPath;
+                    let foundAvailablePath = false;
+                    do {
+                        const baseName = sanitizeFilename(`${uniqueName}-${counter}`);
+                        altPath = path.join(DATA_DIR, `${baseName}.txt`);
+                        counter++;
+                        try {
+                            await fs.access(altPath);
+                            // File exists, try next number
+                        } catch {
+                            // File doesn't exist, we can use this path
+                            foundAvailablePath = true;
+                            break;
+                        }
+                    } while (counter < MAX_FILENAME_COLLISION_ATTEMPTS); // Safety limit
+                    
+                    if (!foundAvailablePath) {
+                        throw new Error(`Unable to find available filename after ${MAX_FILENAME_COLLISION_ATTEMPTS} attempts`);
+                    }
+                    
+                    newFilePath = altPath;
+                } catch {
+                    // New path doesn't exist, safe to use
+                }
+                
+                await fs.rename(currentFilePath, newFilePath);
+                console.log(`Renamed notepad file: ${currentFilePath} -> ${newFilePath}`);
+            } catch (err) {
+                console.warn(`Failed to rename file from ${currentFilePath} to ${newFilePath}:`, err);
+                // File rename failed - do not update the notepad name to maintain consistency
+                return res.status(500).json({ error: 'Failed to rename notepad file. Please try a different name.' });
+            }
+        }
         
         notepad.name = uniqueName;
         await fs.writeFile(NOTEPADS_FILE, JSON.stringify(data));
@@ -789,7 +869,20 @@ app.put('/api/notepads/:id', async (req, res) => {
 app.get('/api/notes/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const notePath = path.join(DATA_DIR, `${id}.txt`);
+        
+        // Find the notepad to get its current name
+        const { notepad } = await findNotepadById(id);
+        
+        let notePath;
+        if (notepad) {
+            // Use helper to find the correct file path
+            notePath = await getNotepadFilePath(notepad, DATA_DIR);
+        } else {
+            // Fallback to ID-based path for backwards compatibility (sanitize id for security)
+            const sanitizedId = sanitizeFilename(id);
+            notePath = path.join(DATA_DIR, `${sanitizedId}.txt`);
+        }
+        
         const notes = await fs.readFile(notePath, 'utf8').catch(() => '');
         
         // Set loaded notes as the current page in cookies.
@@ -811,7 +904,21 @@ app.post('/api/notes/:id', async (req, res) => {
     try {
         const { id } = req.params;
         await ensureDataDir();
-        await fs.writeFile(path.join(DATA_DIR, `${id}.txt`), req.body.content);
+        
+        // Find the notepad to get its current name
+        const { notepad } = await findNotepadById(id);
+        
+        let notePath;
+        if (notepad) {
+            // Use helper to find the correct file path
+            notePath = await getNotepadFilePath(notepad, DATA_DIR);
+        } else {
+            // Fallback to ID-based path for backwards compatibility (sanitize id for security)
+            const sanitizedId = sanitizeFilename(id);
+            notePath = path.join(DATA_DIR, `${sanitizedId}.txt`);
+        }
+        
+        await fs.writeFile(notePath, req.body.content);
         indexNotepads(); // update searching index
         res.json({ success: true });
     } catch (err) {
@@ -831,17 +938,19 @@ app.delete('/api/notepads/:id', async (req, res) => {
             return res.status(400).json({ error: 'Cannot delete default notepad' });
         }
 
-        const data = JSON.parse(await fs.readFile(NOTEPADS_FILE, 'utf8'));
+        const { data, notepad } = await findNotepadById(id);
         console.log('Current notepads:', data.notepads);
         
-        const notepadIndex = data.notepads.findIndex(n => n.id === id);
-        
-        if (notepadIndex === -1) {
+        if (!notepad) {
             console.log(`Notepad with id ${id} not found`);
             return res.status(404).json({ error: 'Notepad not found' });
         }
 
+        // Get the notepad before removing it
+        const notepadToDelete = notepad;
+        
         // Remove from notepads list
+        const notepadIndex = data.notepads.findIndex(n => n.id === id);
         const removedNotepad = data.notepads.splice(notepadIndex, 1)[0];
         console.log(`Removed notepad:`, removedNotepad);
         
@@ -849,15 +958,25 @@ app.delete('/api/notepads/:id', async (req, res) => {
         await fs.writeFile(NOTEPADS_FILE, JSON.stringify(data, null, 2));
         console.log('Updated notepads list saved');
 
-        // Delete the notepad file
-        const notePath = path.join(DATA_DIR, `${id}.txt`);
+        // Delete the notepad file using the helper to find correct path
+        const notePath = await getNotepadFilePath(notepadToDelete, DATA_DIR);
         try {
             await fs.access(notePath);
             await fs.unlink(notePath);
             console.log(`Deleted notepad file: ${notePath}`);
         } catch (err) {
             console.error(`Error accessing or deleting notepad file: ${notePath}`, err);
-            // Continue even if file deletion fails
+            
+            // Try to delete ID-based file as fallback (sanitize id for security)
+            const sanitizedId = sanitizeFilename(id);
+            const fallbackPath = path.join(DATA_DIR, `${sanitizedId}.txt`);
+            try {
+                await fs.access(fallbackPath);
+                await fs.unlink(fallbackPath);
+                console.log(`Deleted fallback notepad file: ${fallbackPath}`);
+            } catch (fallbackErr) {
+                console.error(`Error accessing or deleting fallback file: ${fallbackPath}`, fallbackErr);
+            }
         }
 
         indexNotepads(); // update searching index
@@ -889,3 +1008,14 @@ app.get('/api/search', (req, res) => {
         currentPage: page
     });
 });
+
+// Helper function to find a notepad by ID
+async function findNotepadById(id) {
+    try {
+        const data = JSON.parse(await fs.readFile(NOTEPADS_FILE, 'utf8'));
+        const notepad = data.notepads.find(n => n.id === id);
+        return { data, notepad };
+    } catch (err) {
+        throw new Error(`Error reading notepads file: ${err.message}`);
+    }
+}

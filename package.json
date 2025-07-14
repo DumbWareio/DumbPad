@@ -1,6 +1,6 @@
 {
   "name": "dumbpad",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A simple notepad application",
   "main": "server.js",
   "scripts": {
