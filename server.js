@@ -790,8 +790,7 @@ app.put('/api/notepads/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const { name } = req.body;
-        const data = JSON.parse(await fs.readFile(NOTEPADS_FILE, 'utf8'));
-        const notepad = data.notepads.find(n => n.id === id);
+        const { data, notepad } = await findNotepadById(id);
         if (!notepad) {
             return res.status(404).json({ error: 'Notepad not found' });
         }
@@ -856,8 +855,7 @@ app.get('/api/notes/:id', async (req, res) => {
         const { id } = req.params;
         
         // Find the notepad to get its current name
-        const data = JSON.parse(await fs.readFile(NOTEPADS_FILE, 'utf8'));
-        const notepad = data.notepads.find(n => n.id === id);
+        const { notepad } = await findNotepadById(id);
         
         let notePath;
         if (notepad) {
@@ -891,8 +889,7 @@ app.post('/api/notes/:id', async (req, res) => {
         await ensureDataDir();
         
         // Find the notepad to get its current name
-        const data = JSON.parse(await fs.readFile(NOTEPADS_FILE, 'utf8'));
-        const notepad = data.notepads.find(n => n.id === id);
+        const { notepad } = await findNotepadById(id);
         
         let notePath;
         if (notepad) {
@@ -923,20 +920,19 @@ app.delete('/api/notepads/:id', async (req, res) => {
             return res.status(400).json({ error: 'Cannot delete default notepad' });
         }
 
-        const data = JSON.parse(await fs.readFile(NOTEPADS_FILE, 'utf8'));
+        const { data, notepad } = await findNotepadById(id);
         console.log('Current notepads:', data.notepads);
         
-        const notepadIndex = data.notepads.findIndex(n => n.id === id);
-        
-        if (notepadIndex === -1) {
+        if (!notepad) {
             console.log(`Notepad with id ${id} not found`);
             return res.status(404).json({ error: 'Notepad not found' });
         }
 
         // Get the notepad before removing it
-        const notepadToDelete = data.notepads[notepadIndex];
+        const notepadToDelete = notepad;
         
         // Remove from notepads list
+        const notepadIndex = data.notepads.findIndex(n => n.id === id);
         const removedNotepad = data.notepads.splice(notepadIndex, 1)[0];
         console.log(`Removed notepad:`, removedNotepad);
         
@@ -993,3 +989,14 @@ app.get('/api/search', (req, res) => {
         currentPage: page
     });
 });
+
+// Helper function to find a notepad by ID
+async function findNotepadById(id) {
+    try {
+        const data = JSON.parse(await fs.readFile(NOTEPADS_FILE, 'utf8'));
+        const notepad = data.notepads.find(n => n.id === id);
+        return { data, notepad };
+    } catch (err) {
+        throw new Error(`Error reading notepads file: ${err.message}`);
+    }
+}
