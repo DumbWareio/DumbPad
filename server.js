@@ -36,6 +36,7 @@ const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const PAGE_HISTORY_COOKIE = 'dumbpad_page_history';
 const PAGE_HISTORY_COOKIE_AGE = process.env.PAGE_HISTORY_COOKIE_AGE || 365; // defaults to 1 Year in days
 const pageHistoryCookieAge = PAGE_HISTORY_COOKIE_AGE * 24 * 60 * 60 * 1000;
+const MAX_FILENAME_COLLISION_ATTEMPTS = 100; // Maximum attempts to resolve filename collisions
 
 let notepads_cache = {
     notepads: [],
@@ -803,7 +804,6 @@ app.put('/api/notepads/:id', async (req, res) => {
         const currentFilePath = await getNotepadFilePath(notepad, DATA_DIR);
         const sanitizedNewName = sanitizeFilename(uniqueName);
         let newFilePath = path.join(DATA_DIR, `${sanitizedNewName}.txt`);
-        const MAX_FILENAME_COLLISION_ATTEMPTS = 100; // Maximum attempts to resolve filename collisions
         
         // Rename the file if the name changed and paths are different
         if (notepad.name !== uniqueName && currentFilePath !== newFilePath) {
@@ -862,8 +862,9 @@ app.get('/api/notes/:id', async (req, res) => {
             // Use helper to find the correct file path
             notePath = await getNotepadFilePath(notepad, DATA_DIR);
         } else {
-            // Fallback to ID-based path for backwards compatibility
-            notePath = path.join(DATA_DIR, `${id}.txt`);
+            // Fallback to ID-based path for backwards compatibility (sanitize id for security)
+            const sanitizedId = sanitizeFilename(id);
+            notePath = path.join(DATA_DIR, `${sanitizedId}.txt`);
         }
         
         const notes = await fs.readFile(notePath, 'utf8').catch(() => '');
@@ -896,8 +897,9 @@ app.post('/api/notes/:id', async (req, res) => {
             // Use helper to find the correct file path
             notePath = await getNotepadFilePath(notepad, DATA_DIR);
         } else {
-            // Fallback to ID-based path for backwards compatibility
-            notePath = path.join(DATA_DIR, `${id}.txt`);
+            // Fallback to ID-based path for backwards compatibility (sanitize id for security)
+            const sanitizedId = sanitizeFilename(id);
+            notePath = path.join(DATA_DIR, `${sanitizedId}.txt`);
         }
         
         await fs.writeFile(notePath, req.body.content);
@@ -949,8 +951,9 @@ app.delete('/api/notepads/:id', async (req, res) => {
         } catch (err) {
             console.error(`Error accessing or deleting notepad file: ${notePath}`, err);
             
-            // Try to delete ID-based file as fallback
-            const fallbackPath = path.join(DATA_DIR, `${id}.txt`);
+            // Try to delete ID-based file as fallback (sanitize id for security)
+            const sanitizedId = sanitizeFilename(id);
+            const fallbackPath = path.join(DATA_DIR, `${sanitizedId}.txt`);
             try {
                 await fs.access(fallbackPath);
                 await fs.unlink(fallbackPath);
