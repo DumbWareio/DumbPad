@@ -125,11 +125,16 @@
             </div>
         </header>
         <main>
-            <div id="editor-container" class="editor-container">
-                <textarea id="editor" placeholder="Start typing your notes here..." spellcheck="true" autofocus></textarea>
-            </div>
-            <div id="preview-container" class="preview-container" style="display: none;">
-                <div id="preview-pane"></div>
+            <div id="editor-preview-wrapper" class="editor-preview-wrapper">
+                <div id="editor-container" class="editor-container">
+                    <textarea id="editor" placeholder="Start typing your notes here..." spellcheck="true" autofocus></textarea>
+                </div>
+                <div id="resize-handle" class="resize-handle" style="display: none;">
+                    <div class="resize-handle-line"></div>
+                </div>
+                <div id="preview-container" class="preview-container" style="display: none;">
+                    <div id="preview-pane"></div>
+                </div>
             </div>
         </main>
         <div id="toast-container" class="toast-container"></div>

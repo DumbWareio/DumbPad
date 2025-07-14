@@ -1,9 +1,10 @@
 /**
  * PreviewManager handles all markdown preview functionality including:
- * - Toggling between edit and preview modes
+ * - Toggling between edit, split, and preview modes
  * - Rendering markdown content
  * - Managing preview styles and state
  * - Adding copy buttons to code blocks
+ * - Handling resizable split view
  */
 export class PreviewManager {
     constructor({
@@ -25,22 +26,128 @@ export class PreviewManager {
         this.collaborationManager = collaborationManager;
         this.marked = marked;
         
-        this.isPreviewMode = false;
+        // Preview modes: 'off', 'split', 'preview-only'
+        this.previewMode = 'off';
         this.DEBUG = false;
+        
+        // Get the wrapper element for split view
+        this.editorPreviewWrapper = document.getElementById('editor-preview-wrapper');
+        this.resizeHandle = document.getElementById('resize-handle');
+        
+        // Initialize resize functionality
+        this.initializeResize();
     }
 
     /**
      * Get current preview mode state
      */
     getPreviewMode() {
-        return this.isPreviewMode;
+        return this.previewMode;
     }
 
     /**
      * Set preview mode state
      */
     setPreviewMode(mode) {
-        this.isPreviewMode = mode;
+        this.previewMode = mode;
+    }
+
+    /**
+     * Check if preview is active (split or preview-only)
+     */
+    get isPreviewActive() {
+        return this.previewMode === 'split' || this.previewMode === 'preview-only';
+    }
+
+    /**
+     * Initialize resize handle functionality for split view
+     */
+    initializeResize() {
+        let isResizing = false;
+        let startX = 0;
+        let startY = 0;
+        let startEditorWidth = 0;
+        let startPreviewWidth = 0;
+        let startEditorHeight = 0;
+        let startPreviewHeight = 0;
+
+        const startResize = (e) => {
+            if (this.previewMode !== 'split') return;
+            
+            isResizing = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            startEditorWidth = this.editorContainer.offsetWidth;
+            startPreviewWidth = this.previewContainer.offsetWidth;
+            startEditorHeight = this.editorContainer.offsetHeight;
+            startPreviewHeight = this.previewContainer.offsetHeight;
+            
+            document.addEventListener('mousemove', doResize);
+            document.addEventListener('mouseup', stopResize);
+            
+            // Check if we're in mobile layout (vertical split)
+            const isMobile = window.innerWidth <= 585;
+            document.body.style.cursor = isMobile ? 'row-resize' : 'col-resize';
+            document.body.style.userSelect = 'none';
+        };
+
+        const doResize = (e) => {
+            if (!isResizing) return;
+            
+            const isMobile = window.innerWidth <= 585;
+            
+            if (isMobile) {
+                // Vertical resizing for mobile
+                const deltaY = e.clientY - startY;
+                const wrapperHeight = this.editorPreviewWrapper.offsetHeight;
+                const handleHeight = this.resizeHandle.offsetHeight;
+                
+                const newEditorHeight = startEditorHeight + deltaY;
+                const newPreviewHeight = startPreviewHeight - deltaY;
+                
+                // Enforce minimum heights
+                const minHeight = 100;
+                const maxEditorHeight = wrapperHeight - minHeight - handleHeight;
+                const maxPreviewHeight = wrapperHeight - minHeight - handleHeight;
+                
+                if (newEditorHeight >= minHeight && newEditorHeight <= maxEditorHeight &&
+                    newPreviewHeight >= minHeight && newPreviewHeight <= maxPreviewHeight) {
+                    
+                    this.editorContainer.style.height = `${newEditorHeight}px`;
+                    this.previewContainer.style.height = `${newPreviewHeight}px`;
+                }
+            } else {
+                // Horizontal resizing for desktop
+                const deltaX = e.clientX - startX;
+                const wrapperWidth = this.editorPreviewWrapper.offsetWidth;
+                const handleWidth = this.resizeHandle.offsetWidth;
+                
+                const newEditorWidth = startEditorWidth + deltaX;
+                const newPreviewWidth = startPreviewWidth - deltaX;
+                
+                // Enforce minimum widths
+                const minWidth = 200;
+                const maxEditorWidth = wrapperWidth - minWidth - handleWidth;
+                const maxPreviewWidth = wrapperWidth - minWidth - handleWidth;
+                
+                if (newEditorWidth >= minWidth && newEditorWidth <= maxEditorWidth &&
+                    newPreviewWidth >= minWidth && newPreviewWidth <= maxPreviewWidth) {
+                    
+                    this.editorContainer.style.width = `${newEditorWidth}px`;
+                    this.previewContainer.style.width = `${newPreviewWidth}px`;
+                }
+            }
+        };
+
+        const stopResize = () => {
+            isResizing = false;
+            document.removeEventListener('mousemove', doResize);
+            document.removeEventListener('mouseup', stopResize);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        };
+
+        this.resizeHandle.addEventListener('mousedown', startResize);
     }
 
     /**
@@ -55,32 +162,97 @@ export class PreviewManager {
     }
 
     /**
-     * Toggle between edit and preview modes
+     * Toggle between edit, split, and preview modes (3-way cycle)
      */
     async toggleMarkdownPreview(toggle, enable, enableStatusMessage = true) {
         if (toggle) {
-            this.isPreviewMode = !this.isPreviewMode;
+            // Cycle through modes: off -> split -> preview-only -> off
+            switch (this.previewMode) {
+                case 'off':
+                    this.previewMode = 'split';
+                    break;
+                case 'split':
+                    this.previewMode = 'preview-only';
+                    break;
+                case 'preview-only':
+                    this.previewMode = 'off';
+                    break;
+                default:
+                    this.previewMode = 'off';
+            }
         } else {
-            this.isPreviewMode = enable;
+            // Direct mode setting for settings/initialization
+            if (typeof enable === 'string') {
+                this.previewMode = enable;
+            } else {
+                this.previewMode = enable ? 'preview-only' : 'off';
+            }
         }
         
-        if (this.isPreviewMode) {
-            this.inheritEditorStyles(this.previewPane);
-            await this.renderMarkdownPreview(this.editor.value);
-            this.previewContainer.style.display = 'block';
-            this.editorContainer.style.display = 'none';
-            this.previewMarkdownBtn.classList.add('active');
-            if (enableStatusMessage) {
-                this.toaster.show('Markdown Preview On', 'success');
-            }
-        } else {
-            this.previewContainer.style.display = 'none';
-            this.editorContainer.style.display = 'block';
-            this.previewMarkdownBtn.classList.remove('active');
-            this.editor.focus();
-            if (enableStatusMessage) {
-                this.toaster.show('Markdown Preview Off', 'error');
-            }
+        // Apply the layout based on current mode
+        await this.applyPreviewMode(enableStatusMessage);
+    }
+
+    /**
+     * Apply the current preview mode to the UI
+     */
+    async applyPreviewMode(enableStatusMessage = true) {
+        // Remove all mode classes
+        this.editorPreviewWrapper.classList.remove('split-view', 'preview-only');
+        
+        switch (this.previewMode) {
+            case 'split':
+                this.editorPreviewWrapper.classList.add('split-view');
+                this.previewContainer.style.display = 'block';
+                this.resizeHandle.style.display = 'flex';
+                this.previewMarkdownBtn.classList.add('active');
+                
+                this.inheritEditorStyles(this.previewPane);
+                await this.renderMarkdownPreview(this.editor.value);
+                
+                if (enableStatusMessage) {
+                    this.toaster.show('Split Preview On', 'success');
+                }
+                break;
+                
+            case 'preview-only':
+                this.editorPreviewWrapper.classList.add('preview-only');
+                this.previewContainer.style.display = 'block';
+                this.resizeHandle.style.display = 'none';
+                this.previewMarkdownBtn.classList.add('active');
+                
+                // Reset container dimensions
+                this.editorContainer.style.width = '';
+                this.previewContainer.style.width = '';
+                this.editorContainer.style.height = '';
+                this.previewContainer.style.height = '';
+                
+                this.inheritEditorStyles(this.previewPane);
+                await this.renderMarkdownPreview(this.editor.value);
+                
+                if (enableStatusMessage) {
+                    this.toaster.show('Full Preview On', 'success');
+                }
+                break;
+                
+            case 'off':
+            default:
+                this.previewContainer.style.display = 'none';
+                this.resizeHandle.style.display = 'none';
+                this.previewMarkdownBtn.classList.remove('active');
+                
+                // Reset container dimensions
+                this.editorContainer.style.width = '';
+                this.previewContainer.style.width = '';
+                this.editorContainer.style.height = '';
+                this.previewContainer.style.height = '';
+                
+                this.editor.focus();
+                
+                if (enableStatusMessage) {
+                    this.toaster.show('Editor On');
+                }
+                break;
         }
         
         this.collaborationManager.updateLocalCursor();
@@ -257,7 +429,7 @@ export class PreviewManager {
      * Update preview content if in preview mode
      */
     async updatePreviewIfActive(content) {
-        if (this.isPreviewMode) {
+        if (this.isPreviewActive) {
             await this.renderMarkdownPreview(content);
         }
     }
@@ -266,7 +438,7 @@ export class PreviewManager {
      * Generate formatted content for printing
      */
     getFormattedContentForPrint(content, isMarkdownFile) {
-        if (isMarkdownFile || this.isPreviewMode) {
+        if (isMarkdownFile || this.isPreviewActive) {
             return this.marked.parse(content);
         } else {
             return content
@@ -301,10 +473,10 @@ export class PreviewManager {
      */
     async preparePrintContent(content, notepadName, currentSettings, currentTheme) {
         const isMarkdownFile = notepadName.toLowerCase().endsWith('.md');
-        let formattedContent = this.getFormattedContentForPrint(content, isMarkdownFile || this.isPreviewMode);
+        let formattedContent = this.getFormattedContentForPrint(content, isMarkdownFile || this.isPreviewActive);
         
         // Add language labels to code blocks for print
-        if (isMarkdownFile || this.isPreviewMode) {
+        if (isMarkdownFile || this.isPreviewActive) {
             formattedContent = this.addCopyLangButtonsToCodeBlocks(formattedContent, true);
         }
         
@@ -551,6 +723,14 @@ export class PreviewManager {
     addEventListeners() {
         this.previewMarkdownBtn.addEventListener('click', () => {
             this.toggleMarkdownPreview(true);
+        });
+        
+        // Handle window resize to switch between mobile and desktop layouts
+        window.addEventListener('resize', () => {
+            if (this.previewMode === 'split') {
+                // Reapply split mode to adjust layout for current screen size
+                this.applyPreviewMode(false);
+            }
         });
     }
 }

@@ -185,6 +185,85 @@ main {
     position: relative;
     z-index: 1;
     background-color: var(--textarea-bg);
+    transition: var(--transition);
+}
+
+/* Split view wrapper */
+.editor-preview-wrapper {
+    display: flex;
+    height: calc(100vh - 9rem);
+    gap: 0;
+    position: relative;
+}
+
+/* Split view styles */
+.editor-preview-wrapper.split-view .editor-container {
+    width: 50%;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2), 2px 0 4px rgba(0, 0, 0, 0.1);
+}
+
+.editor-preview-wrapper.split-view .preview-container {
+    width: 50%;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2), -2px 0 4px rgba(0, 0, 0, 0.1);
+}
+
+.editor-preview-wrapper.preview-only .editor-container {
+    display: none;
+}
+
+.editor-preview-wrapper.preview-only .preview-container {
+    width: 100%;
+}
+
+.editor-preview-wrapper:not(.split-view):not(.preview-only) .editor-container {
+    width: 100%;
+}
+
+.editor-preview-wrapper:not(.split-view):not(.preview-only) .preview-container {
+    display: none;
+}
+
+/* Resize handle */
+.resize-handle {
+    width: 8px;
+    background-color: var(--secondary-color);
+    cursor: col-resize;
+    position: relative;
+    user-select: none;
+    transition: background-color 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+}
+
+.resize-handle:hover {
+    background-color: var(--primary-color);
+}
+
+.resize-handle-line {
+    width: 2px;
+    height: 40px;
+    background-color: var(--text-color);
+    opacity: 0.3;
+    border-radius: 2px;
+    transition: opacity 0.2s ease;
+}
+
+.resize-handle:hover .resize-handle-line {
+    opacity: 0.6;
+}
+
+/* Ensure proper flex behavior in split view */
+.editor-preview-wrapper.split-view .editor-container,
+.editor-preview-wrapper.split-view .preview-container {
+    flex-shrink: 0;
+    min-width: 200px;
+    max-width: calc(100% - 200px - 8px);
 }
 
 .toast-container {
@@ -797,6 +876,11 @@ main {
         margin: 0, auto;
         padding: 0, auto;
     }
+    
+    .editor-preview-wrapper {
+        height: 71vh;
+    }
+    
     #editor {
         padding: 0.3rem;
     }
