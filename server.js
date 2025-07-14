@@ -564,7 +564,7 @@ async function ensureDataDir() {
             }, null, 2));
         }
 
-        // Ensure default notepad file exists (check both old and new paths)
+        // Ensure default notepad file exists
         await migrateDefaultNotepad(DATA_DIR);
     } catch (err) {
         console.error('Error initializing data directory:', err);
@@ -650,6 +650,7 @@ async function indexNotepads() {
     });
 
     // console.log(notepads_cache); // uncomment to debug
+    console.log("Indexing complete. Notepads indexed:", notepads_cache.notepads.length);
 }
 
 // Helper function to generate unique notepad name

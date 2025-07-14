@@ -18,6 +18,11 @@ function sanitizeFilename(name) {
  * @returns {Promise<string>} - The file path to use for this notepad
  */
 async function getNotepadFilePath(notepad, dataDir) {
+    // Default notepad always uses default.txt filename
+    if (notepad.id === 'default') {
+        return path.join(dataDir, 'default.txt');
+    }
+    
     const sanitizedName = sanitizeFilename(notepad.name);
     const nameBasedPath = path.join(dataDir, `${sanitizedName}.txt`);
     const idBasedPath = path.join(dataDir, `${notepad.id}.txt`);
@@ -85,6 +90,11 @@ async function migrateAllNotepadsToNameBasedFiles(notepads, dataDir) {
         
         let migratedCount = 0;
         for (const notepad of notepads) {
+            // Skip default notepad - it should always use default.txt filename
+            if (notepad.id === 'default') {
+                continue;
+            }
+            
             const oldPath = path.join(dataDir, `${notepad.id}.txt`);
             const sanitizedName = sanitizeFilename(notepad.name);
             const newPath = path.join(dataDir, `${sanitizedName}.txt`);
@@ -120,30 +130,20 @@ async function migrateAllNotepadsToNameBasedFiles(notepads, dataDir) {
 }
 
 /**
- * Migrate default notepad file from ID-based to name-based if needed
+ * Ensure default notepad file exists
  * @param {string} dataDir - The data directory path
  * @returns {Promise<void>}
  */
 async function migrateDefaultNotepad(dataDir) {
-    const defaultNotepad = { id: 'default', name: 'Default Notepad' };
-    const defaultNotePath = await getNotepadFilePath(defaultNotepad, dataDir);
+    const defaultNotePath = path.join(dataDir, 'default.txt');
     
     try {
         await fs.access(defaultNotePath);
+        // File exists, nothing to do
     } catch {
-        // If name-based file doesn't exist, check for ID-based file
-        const legacyDefaultPath = path.join(dataDir, 'default.txt');
-        try {
-            await fs.access(legacyDefaultPath);
-            // Legacy file exists, migrate it to name-based
-            if (defaultNotePath !== legacyDefaultPath) {
-                await fs.rename(legacyDefaultPath, defaultNotePath);
-                console.log(`Migrated default notepad: ${legacyDefaultPath} -> ${defaultNotePath}`);
-            }
-        } catch {
-            // Neither exists, create new name-based file
-            await fs.writeFile(defaultNotePath, '');
-        }
+        // File doesn't exist, create it
+        await fs.writeFile(defaultNotePath, '');
+        console.log(`Created default notepad file: ${defaultNotePath}`);
     }
 }
 
