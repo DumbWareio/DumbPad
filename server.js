@@ -815,6 +815,7 @@ app.put('/api/notepads/:id', async (req, res) => {
                     // File exists, we need to generate a different filename
                     let counter = 1;
                     let altPath;
+                    let foundAvailablePath = false;
                     do {
                         const baseName = sanitizeFilename(`${uniqueName}-${counter}`);
                         altPath = path.join(DATA_DIR, `${baseName}.txt`);
@@ -824,9 +825,14 @@ app.put('/api/notepads/:id', async (req, res) => {
                             // File exists, try next number
                         } catch {
                             // File doesn't exist, we can use this path
+                            foundAvailablePath = true;
                             break;
                         }
                     } while (counter < MAX_FILENAME_COLLISION_ATTEMPTS); // Safety limit
+                    
+                    if (!foundAvailablePath) {
+                        throw new Error(`Unable to find available filename after ${MAX_FILENAME_COLLISION_ATTEMPTS} attempts`);
+                    }
                     
                     newFilePath = altPath;
                 } catch {
@@ -837,7 +843,8 @@ app.put('/api/notepads/:id', async (req, res) => {
                 console.log(`Renamed notepad file: ${currentFilePath} -> ${newFilePath}`);
             } catch (err) {
                 console.warn(`Failed to rename file from ${currentFilePath} to ${newFilePath}:`, err);
-                // Continue with just updating the metadata
+                // File rename failed - do not update the notepad name to maintain consistency
+                return res.status(500).json({ error: 'Failed to rename notepad file. Please try a different name.' });
             }
         }
         
