@@ -1089,7 +1089,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         printNotepadBtn.addEventListener('click', () => {
             printNotepad();
         });
-        previewMarkdownBtn.addEventListener('click', () => previewManager.toggleMarkdownPreview(true));
 
         settingsButton.addEventListener('click', () => {
             settingsManager.loadSettings();
@@ -1368,6 +1367,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         addShortcutEventListeners();
         addBrowserNavigationListener();
         searchManager.addEventListeners();
+        previewManager.addEventListeners();
     }
 
     function detectOS() {
@@ -1421,7 +1421,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     
     function applySettings(currentSettings) {
-        previewManager.toggleMarkdownPreview(false, currentSettings.defaultMarkdownPreview, false);
+        // Use the new preview mode setting directly
+        const previewMode = currentSettings.defaultMarkdownPreviewMode || 'off';
+        previewManager.toggleMarkdownPreview(false, previewMode, false);
     };
 
     // Initialize the app
