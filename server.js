@@ -609,7 +609,11 @@ async function getNotepadsFromDir() {
         });
         
         return !matchesId && !matchesSanitizedName;
-    }).map(txtFile => ({ id: txtFile, name: txtFile }));
+    }).map(txtFile => {
+        // Generate a unique name that doesn't conflict with existing notepads or default
+        const uniqueName = generateUniqueName(txtFile, notepads);
+        return { id: txtFile, name: uniqueName };
+    });
 
     if (newNotepads.length > 0) {
         notepadsData.notepads = [...notepads, ...newNotepads];
@@ -658,8 +662,9 @@ function generateUniqueName(desiredName, existingNotepads) {
     let uniqueName = desiredName;
     let counter = 1;
     
-    // Check if name already exists
-    while (existingNotepads.some(notepad => notepad.name === uniqueName)) {
+    // Check if name already exists or if sanitized name would conflict with default.txt
+    while (existingNotepads.some(notepad => notepad.name === uniqueName) || 
+           sanitizeFilename(uniqueName).toLowerCase() === 'default') {
         uniqueName = `${desiredName}-${counter}`;
         counter++;
     }
@@ -806,8 +811,11 @@ app.put('/api/notepads/:id', async (req, res) => {
         const sanitizedNewName = sanitizeFilename(uniqueName);
         let newFilePath = path.join(DATA_DIR, `${sanitizedNewName}.txt`);
         
-        // Rename the file if the name changed and paths are different
-        if (notepad.name !== uniqueName && currentFilePath !== newFilePath) {
+        // Skip file renaming for default notepad - it should always remain default.txt
+        const shouldRenameFile = id !== 'default' && notepad.name !== uniqueName && currentFilePath !== newFilePath;
+        
+        // Rename the file if needed (but skip for default notepad)
+        if (shouldRenameFile) {
             try {
                 // Check if new path already exists
                 try {
