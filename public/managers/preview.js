@@ -75,30 +75,47 @@ export class PreviewManager {
             if (this.previewMode !== 'split') return;
             
             isResizing = true;
-            startX = e.clientX;
-            startY = e.clientY;
+            
+            // Get coordinates from either mouse or touch event
+            const clientX = e.clientX || (e.touches && e.touches[0] && e.touches[0].clientX) || 0;
+            const clientY = e.clientY || (e.touches && e.touches[0] && e.touches[0].clientY) || 0;
+            
+            startX = clientX;
+            startY = clientY;
             startEditorWidth = this.editorContainer.offsetWidth;
             startPreviewWidth = this.previewContainer.offsetWidth;
             startEditorHeight = this.editorContainer.offsetHeight;
             startPreviewHeight = this.previewContainer.offsetHeight;
             
+            // Add both mouse and touch event listeners
             document.addEventListener('mousemove', doResize);
             document.addEventListener('mouseup', stopResize);
+            document.addEventListener('touchmove', doResize, { passive: false });
+            document.addEventListener('touchend', stopResize);
+            document.addEventListener('touchcancel', stopResize);
             
             // Check if we're in mobile layout (vertical split)
             const isMobile = window.innerWidth <= 585;
             document.body.style.cursor = isMobile ? 'row-resize' : 'col-resize';
             document.body.style.userSelect = 'none';
+            
+            // Prevent default to stop scrolling on touch
+            e.preventDefault();
         };
 
         const doResize = (e) => {
             if (!isResizing) return;
             
+            // Get coordinates from either mouse or touch event
+            const clientX = e.clientX || (e.touches && e.touches[0] && e.touches[0].clientX) || 0;
+            const clientY = e.clientY || (e.touches && e.touches[0] && e.touches[0].clientY) || 0;
+            
+            // Check if we're in mobile layout (vertical split)
             const isMobile = window.innerWidth <= 585;
             
             if (isMobile) {
                 // Vertical resizing for mobile
-                const deltaY = e.clientY - startY;
+                const deltaY = clientY - startY;
                 const wrapperHeight = this.editorPreviewWrapper.offsetHeight;
                 const handleHeight = this.resizeHandle.offsetHeight;
                 
@@ -118,7 +135,7 @@ export class PreviewManager {
                 }
             } else {
                 // Horizontal resizing for desktop
-                const deltaX = e.clientX - startX;
+                const deltaX = clientX - startX;
                 const wrapperWidth = this.editorPreviewWrapper.offsetWidth;
                 const handleWidth = this.resizeHandle.offsetWidth;
                 
@@ -137,17 +154,42 @@ export class PreviewManager {
                     this.previewContainer.style.width = `${newPreviewWidth}px`;
                 }
             }
+            
+            // Prevent default to stop scrolling on touch
+            e.preventDefault();
         };
 
         const stopResize = () => {
             isResizing = false;
+            // Remove both mouse and touch event listeners
             document.removeEventListener('mousemove', doResize);
             document.removeEventListener('mouseup', stopResize);
+            document.removeEventListener('touchmove', doResize);
+            document.removeEventListener('touchend', stopResize);
+            document.removeEventListener('touchcancel', stopResize);
             document.body.style.cursor = '';
             document.body.style.userSelect = '';
         };
 
+        // Add both mouse and touch event listeners for the resize handle
         this.resizeHandle.addEventListener('mousedown', startResize);
+        this.resizeHandle.addEventListener('touchstart', startResize, { passive: false });
+        
+        // Additional touch event handling for better mobile support
+        this.resizeHandle.addEventListener('touchcancel', stopResize);
+        
+        // Add visual feedback for touch on mobile
+        if ('ontouchstart' in window) {
+            this.resizeHandle.addEventListener('touchstart', () => {
+                this.resizeHandle.style.backgroundColor = 'var(--primary-color)';
+            });
+            
+            this.resizeHandle.addEventListener('touchend', () => {
+                setTimeout(() => {
+                    this.resizeHandle.style.backgroundColor = '';
+                }, 100);
+            });
+        }
     }
 
     /**
