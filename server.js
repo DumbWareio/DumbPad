@@ -804,6 +804,7 @@ app.put('/api/notepads/:id', async (req, res) => {
         const currentFilePath = await getNotepadFilePath(notepad, DATA_DIR);
         const sanitizedNewName = sanitizeFilename(uniqueName);
         let newFilePath = path.join(DATA_DIR, `${sanitizedNewName}.txt`);
+        const MAX_FILENAME_COLLISION_ATTEMPTS = 100; // Maximum attempts to resolve filename collisions
         
         // Rename the file if the name changed and paths are different
         if (notepad.name !== uniqueName && currentFilePath !== newFilePath) {
@@ -825,7 +826,7 @@ app.put('/api/notepads/:id', async (req, res) => {
                             // File doesn't exist, we can use this path
                             break;
                         }
-                    } while (counter < 100); // Safety limit
+                    } while (counter < MAX_FILENAME_COLLISION_ATTEMPTS); // Safety limit
                     
                     newFilePath = altPath;
                 } catch {
