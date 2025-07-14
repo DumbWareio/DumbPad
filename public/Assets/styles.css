@@ -767,6 +767,36 @@ main {
     transform: translateX(20px);
 }
 
+#settings-modal input[type="radio"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--secondary-color);
+    border-radius: 50%;
+    background-color: var(--textarea-bg);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+#settings-modal input[type="radio"]:checked {
+    border-color: var(--primary-color);
+    background-color: var(--primary-color);
+}
+
+#settings-modal input[type="radio"]:checked::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: white;
+}
+
 @media(max-width: 1400px) {
     #header-title {
         font-size: 1.2rem;

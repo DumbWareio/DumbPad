@@ -1421,8 +1421,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     
     function applySettings(currentSettings) {
-        // Convert boolean setting to preview mode string
-        const previewMode = currentSettings.defaultMarkdownPreview ? 'preview-only' : 'off';
+        // Use the new preview mode setting directly
+        const previewMode = currentSettings.defaultMarkdownPreviewMode || 'off';
         previewManager.toggleMarkdownPreview(false, previewMode, false);
     };
 

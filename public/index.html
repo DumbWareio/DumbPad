@@ -190,8 +190,21 @@
                         <input type="checkbox" id="settings-remote-connection-messages" />
                     </label>
                     <label class="settings-label">
-                        Markdown preview as default view:
-                        <input type="checkbox" id="settings-default-markdown-preview" />
+                        Default preview mode:
+                        <div style="margin-top: 0.5rem; display: flex; gap: 1rem;">
+                            <label style="display: flex; align-items: center; gap: 0.5rem;">
+                                <input type="radio" name="default-preview-mode" id="settings-default-preview-editor" value="off" />
+                                Editor
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 0.5rem;">
+                                <input type="radio" name="default-preview-mode" id="settings-default-preview-split" value="split" />
+                                Split
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 0.5rem;">
+                                <input type="radio" name="default-preview-mode" id="settings-default-preview-full" value="preview-only" />
+                                Full
+                            </label>
+                        </div>
                     </label>
                     <label class="settings-label">
                         Disable auto-expand markdown in print:
