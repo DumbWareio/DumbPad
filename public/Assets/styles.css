@@ -239,6 +239,7 @@ main {
     align-items: center;
     justify-content: center;
     z-index: 10;
+    cursor: ew-resize;
 }
 
 .resize-handle:hover {
@@ -256,6 +257,7 @@ main {
 
 .resize-handle:hover .resize-handle-line {
     opacity: 0.6;
+    width: 6px;
 }
 
 /* Ensure proper flex behavior in split view */
