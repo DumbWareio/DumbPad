@@ -28,9 +28,10 @@
 
 code {
   background-color: var(--code-markdown);
-  padding: 2px 4px;
+  padding: 2px 2px;
   border-radius: 5px;
   margin: 1.5rem 0;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 /* Code block styling */
@@ -41,40 +42,99 @@ code {
   overflow-x: hidden;
   width: fit-content;
   max-width: 100%;
+  min-width: 120px; /* Ensure minimum width to accommodate language/copy button */
   box-sizing: border-box;
   position: relative;
   margin: 1.5rem 0;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-/* Copy button for code blocks */
-#preview-pane pre .copy-button {
+/* Language label with copy functionality for code blocks */
+#preview-pane pre .code-lang-copy-button {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 2px;
+  right: 2px;
   background-color: var(--secondary-color);
   border: 1px solid var(--text-color);
-  border-radius: 4px;
-  padding: 4px;
-  width: 24px;
-  height: 24px;
+  border-radius: 6px;
+  padding: 4px 3px 4px 4px;
+  gap: 1px;
   display: flex;
   align-items: center;
-  justify-content: center;
   color: var(--text-color);
   cursor: pointer;
-  opacity: 0.7;
-  transition: opacity 0.2s, background-color 0.2s;
+  opacity: 0.65;
+  transition: opacity 0.2s ease, background-color 0.3s ease, color 0.3s ease,
+    border-color 0.3s ease;
   z-index: 10;
+  font-size: 0.65rem;
+  font-family: monospace;
+  white-space: nowrap;
 }
 
-#preview-pane pre .copy-button:hover {
+#preview-pane pre .code-lang-copy-button:hover {
   opacity: 1;
   background-color: var(--primary-color);
   color: white;
+  transition: opacity 0.2s ease, background-color 0.2s ease, color 0.2s ease;
 }
 
-#preview-pane pre .copy-button:active {
+#preview-pane pre .code-lang-copy-button:active {
   transform: scale(0.95);
+}
+
+/* Language text always visible */
+#preview-pane pre .code-lang-copy-button .lang-text {
+  font-weight: 500;
+}
+
+/* Copy icon hidden by default, shown on hover */
+#preview-pane pre .code-lang-copy-button .copy-icon {
+  opacity: 0;
+  width: 0;
+  max-width: 0;
+  overflow: hidden;
+  transition: opacity 0.2s ease, width 0.2s ease, max-width 0.2s ease;
+  display: flex;
+  align-items: center;
+}
+
+#preview-pane pre .code-lang-copy-button:hover .copy-icon {
+  opacity: 1;
+  width: 12px;
+  max-width: 12px;
+}
+
+/* Keep labels visible during print */
+@media print {
+  /* Ensure code blocks have sufficient width in print */
+  #preview-pane pre {
+    min-width: 120px !important;
+    overflow: visible !important;
+  }
+
+  #preview-pane pre .code-lang-copy-button {
+    opacity: 1 !important;
+    background-color: var(--secondary-color) !important;
+    color: var(--text-color) !important;
+    -webkit-print-color-adjust: exact !important;
+    color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide copy icon during print */
+  #preview-pane pre .code-lang-copy-button .copy-icon {
+    display: none !important;
+  }
+
+  /* Ensure print-specific labels are visible */
+  #preview-pane pre .code-lang-copy-button.print-label {
+    opacity: 1 !important;
+    background-color: var(--secondary-color) !important;
+    color: var(--text-color) !important;
+    cursor: default !important;
+    pointer-events: none !important;
+  }
 }
 
 #preview-pane pre code {
@@ -87,6 +147,36 @@ code {
   white-space: pre-wrap;
   max-width: 100%;
   word-break: break-word;
+  transition: color 0.3s ease;
+}
+
+/* Language label for code blocks */
+#preview-pane pre .language-label {
+  position: absolute;
+  top: 8px;
+  right: 40px; /* Position to the left of the copy button */
+  background-color: var(--secondary-color);
+  border: 1px solid var(--text-color);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-color);
+  opacity: 0.7;
+  text-transform: lowercase;
+  letter-spacing: 0.5px;
+  z-index: 9;
+  pointer-events: none; /* Don't interfere with text selection */
+  user-select: none;
+  min-width: 24px;
+  text-align: center;
+  transition: opacity 0.2s ease, background-color 0.3s ease, color 0.3s ease,
+    border-color 0.3s ease;
+}
+
+#preview-pane pre:hover .language-label {
+  opacity: 1;
+  transition: opacity 0.2s ease;
 }
 
 /* Reduce spacing below headers */

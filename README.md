@@ -13,7 +13,7 @@ A stupid simple, no auth (unless you want it!), modern notepad application with 
   </a> -->
 </p>
 
-![image](https://github.com/user-attachments/assets/baf945a8-327b-472a-abf9-bf03af6e7079)
+![dumbpad](https://github.com/user-attachments/assets/3d880a0b-bbee-4794-ae2a-1b7b79335dde)
 
 ## Table of Contents
 
@@ -44,6 +44,7 @@ A stupid simple, no auth (unless you want it!), modern notepad application with 
   - GitHub-style alert blocks (Note, Tip, Important, Warning, Caution)
   - Extended table formatting
   - Auto-expand collapsible details in print (configurable)
+  - Code syntax highlighting in `fenced codeblocks`
 - Direct notepad linking with URL parameters
 - Copy shareable notepad links
 - Browser navigation support (back/forward buttons)
@@ -98,6 +99,11 @@ services:
       # MAX_ATTEMPTS: ${DUMBPAD_MAX_ATTEMPTS:-5} # Customize pin max attempts (if empty, defaults to 5)
       # COOKIE_MAX_AGE: ${DUMBPAD_COOKIE_MAX_AGE:-24} # Customize maximum age of cookies primarily used for pin verification (default 24) in hours
       # PAGE_HISTORY_COOKIE_AGE: ${DUMBPAD_PAGE_HISTORY_COOKIE_AGE:-365} # Customize age of cookie to show the last notepad opened (default 365 | max 400) in days - shows default notepad on load if expired
+      
+      # MARKDOWN CODE SYNTAX HIGHLIGHTING (only use below if you want to restrict to specific languages):
+      # By default, DumbPad includes support for all ~180 languages supported by highlight.js.
+      # view entire list and usage in /docs/MARKDOWN_SYNTAX_HIGHLIGHTING_USAGE.md
+      # HIGHLIGHT_LANGUAGES=c,csharp,css,dockerfile,go,html,java,javascript,json,kotlin,markdown,perl,php,python,ruby,sql,swift,typescript,xml,yaml
 ```
 
 Then run:
@@ -152,8 +158,8 @@ docker run -p 3000:3000 -v "${PWD}\data:/app/data" dumbwareio/dumbpad:latest
 - 🔗 Direct notepad linking with shareable URLs
 - 🧭 Browser navigation support (back/forward buttons)
 - ⬇️ Download notes as text or markdown files
-- �️ Print functionality with auto-expanded collapsible sections
-- �🔍 Fuzzy Search by name or contents
+- 🖨️ Print functionality with auto-expanded collapsible sections
+- 🔍 Fuzzy Search by name or contents
 - 🔄 Real-time saving
 - 💽 Add .txt files into data folder to import (requires page refresh)
 - ⚡ Zero dependencies on client-side
@@ -180,6 +186,7 @@ docker run -p 3000:3000 -v "${PWD}\data:/app/data" dumbwareio/dumbpad:latest
 | MAX_ATTEMPTS            | Maximum PIN entry attempts before lockout                    | 5                     | No       |
 | COOKIE_MAX_AGE          | Maximum age of authentication cookies (in hours)             | 24                    | No       |
 | PAGE_HISTORY_COOKIE_AGE | Age of cookie storing last opened notepad (in days, max 400) | 365                   | No       |
+| HIGHLIGHT_LANGUAGES     | Comma-separated list of code syntax languages to restrict to | all if not supplied   | No       |
 
 ## Security
 
@@ -211,7 +218,7 @@ Access settings via the gear icon (⚙️) in the header or use keyboard shortcu
 | **Auto-save Status Interval**  | Time interval for auto-save notifications (0 = disabled) | 1000ms   | Any number (milliseconds) |
 | **Remote Connection Messages** | Show notifications when users connect/disconnect         | Enabled  | Enabled/Disabled          |
 | **Disable Print Expansion**    | Prevent auto-expanding collapsed sections when printing  | Disabled | Enabled/Disabled          |
-| **Default Markdown Preview**   | Start in markdown preview mode by default                | Disabled | Enabled/Disabled          |
+| **Default Markdown Preview**   | Default view when loading DumbPad (Client-based)         | Editor   | Editor, Split, Full       |
 
 ### Notepad Management
 
@@ -246,6 +253,8 @@ Access settings via the gear icon (⚙️) in the header or use keyboard shortcu
 - marked: Markdown formatting
 - marked-alert: GitHub-style alert blocks for markdown
 - marked-extended-tables: Enhanced table support for markdown
+- marked-highlight: Syntax highlighting for code blocks in markdown
+- @highlightjs/cdn-assets: Highlight.js assets for code syntax highlighting
 - fuse.js: Fuzzy searching
 - ws: WebSocket support for real-time collaboration
 
@@ -277,7 +286,19 @@ The `data` directory contains:
 - **Download**: Click download button or `Ctrl+Alt+A` (or `Cmd+Ctrl+A`) for .txt/.md export
 - **Print**: `Ctrl+P` (or `Cmd+P`) with enhanced formatting and auto-expanded collapsible sections
 
-### Markdown Enhancements
+### Preview Modes
+
+Swap between different modes using the 3-way markdown toggle button: (Editor, Split, Full)
+
+| Editor                                                                                                             | Split Preview                                                                                                     | Full Preview                                                                                                     |
+| ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| <img alt="editor-preview" src="https://github.com/user-attachments/assets/dfa494a5-2caa-4e29-84a1-82d16310c6c4" /> | <img alt="split-preview" src="https://github.com/user-attachments/assets/a0f4b559-f1b7-4b1b-abe6-5289d5d8d494" /> | <img alt="full-preview" src="https://github.com/user-attachments/assets/2d6c14f2-6906-41c5-92f4-7a221d3911c6" /> |
+
+You can also set your default preview mode in settings.
+
+<img width="30%" alt="image" src="https://github.com/user-attachments/assets/ccc2b41c-a817-4367-b661-e96f05490566" />
+
+### Markdown Formatting
 
 DumbPad now supports enhanced markdown features:
 
@@ -313,6 +334,18 @@ DumbPad now supports enhanced markdown features:
 Content that will be automatically expanded when printing
 </details>
 ```
+
+#### Code Syntax Highlighting
+
+- Uses highlight.js for syntax highlighting using fenced code blocks
+- Defaults to all supported languages (configured via `HIGHLIGHT_LANGUAGES` environment variable if you would like to restrict to specific languages)
+- Read more and view examples in /docs/MARKDOWN_SYNTAX_HIGHLIGHTING_USAGE.md
+
+````markdown
+```javascript
+console.log("Hello, world!");
+```
+````
 
 ### URL Parameters
 
@@ -364,3 +397,7 @@ Made with ❤️ by DumbWare.io
 - Markdown code syntax highlighting
 
 > Got an idea? Open an issue or submit a PR
+
+```
+
+```

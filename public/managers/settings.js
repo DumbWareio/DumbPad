@@ -5,7 +5,9 @@ export default class SettingsManager {
     this.applySettings = applySettings
     this.settingsInputAutoSaveStatusInterval = document.getElementById('autosave-status-interval-input');
     this.settingsEnableRemoteConnectionMessages = document.getElementById('settings-remote-connection-messages');
-    this.settingsDefaultMarkdownPreview = document.getElementById('settings-default-markdown-preview');
+    this.settingsDefaultPreviewEditor = document.getElementById('settings-default-preview-editor');
+    this.settingsDefaultPreviewSplit = document.getElementById('settings-default-preview-split');
+    this.settingsDefaultPreviewFull = document.getElementById('settings-default-preview-full');
     this.settingsDisablePrintExpand = document.getElementById('settings-disable-print-expand');
   }
   
@@ -13,7 +15,7 @@ export default class SettingsManager {
     return { // Add additional default settings in here:
       saveStatusMessageInterval: 500,
       enableRemoteConnectionMessages: false,
-      defaultMarkdownPreview: false,
+      defaultMarkdownPreviewMode: 'off', // 'off', 'split', or 'preview-only'
       disablePrintExpand: false,
     }
   }
@@ -58,8 +60,19 @@ export default class SettingsManager {
       appSettings.enableRemoteConnectionMessages = currentSettings.enableRemoteConnectionMessages;
       this.settingsEnableRemoteConnectionMessages.checked = currentSettings.enableRemoteConnectionMessages;
 
-      appSettings.defaultMarkdownPreview = currentSettings.defaultMarkdownPreview;
-      this.settingsDefaultMarkdownPreview.checked = currentSettings.defaultMarkdownPreview;
+      appSettings.defaultMarkdownPreviewMode = currentSettings.defaultMarkdownPreviewMode || 'off';
+      // Set the appropriate radio button based on the saved setting
+      switch (currentSettings.defaultMarkdownPreviewMode) {
+        case 'split':
+          this.settingsDefaultPreviewSplit.checked = true;
+          break;
+        case 'preview-only':
+          this.settingsDefaultPreviewFull.checked = true;
+          break;
+        default:
+          this.settingsDefaultPreviewEditor.checked = true;
+          break;
+      }
 
       appSettings.disablePrintExpand = currentSettings.disablePrintExpand;
       this.settingsDisablePrintExpand.checked = currentSettings.disablePrintExpand;
@@ -81,7 +94,16 @@ export default class SettingsManager {
 
     appSettings.enableRemoteConnectionMessages = this.settingsEnableRemoteConnectionMessages.checked;
 
-    appSettings.defaultMarkdownPreview = this.settingsDefaultMarkdownPreview.checked;
+    // Get the selected radio button value for default preview mode
+    if (this.settingsDefaultPreviewEditor.checked) {
+      appSettings.defaultMarkdownPreviewMode = 'off';
+    } else if (this.settingsDefaultPreviewSplit.checked) {
+      appSettings.defaultMarkdownPreviewMode = 'split';
+    } else if (this.settingsDefaultPreviewFull.checked) {
+      appSettings.defaultMarkdownPreviewMode = 'preview-only';
+    } else {
+      appSettings.defaultMarkdownPreviewMode = 'off'; // fallback to default
+    }
 
     appSettings.disablePrintExpand = this.settingsDisablePrintExpand.checked;
     

@@ -2,10 +2,26 @@ let APP_VERSION = "1.0.0"; // Default version, will be updated by server
 
 const getCacheName = (version) => `DUMBPAD_CACHE_${version}`;
 
-const getAppVersion = async () => {
+const getConfig = async () => {
   try {
     const response = await fetch("/api/config");
     const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to fetch config:", error);
+    return null; // Fallback to default version
+  }
+}
+
+const getAppVersion = async () => {
+  try {
+    const data = await getConfig();
+    if (!data || !data.version) {
+      console.warn("No version found in config, using default version:", APP_VERSION);
+      return APP_VERSION; // Fallback to default version
+    }
+    APP_VERSION = data.version; // Update global version variable
+    console.log("App version fetched from config:", APP_VERSION);
     return data.version;
   } catch (error) {
     console.error("Failed to fetch app version:", error);
@@ -35,9 +51,29 @@ const installNewCache = async (version) => {
   try {
     const response = await fetch("/asset-manifest.json");
     const assets = await response.json();
-    const assetsToCache = [...assets, "/js/marked/marked.esm.js", "/js/marked-extended-tables/index.js", "/js/marked-alert/index.js"];
+    const assetsToCache = [
+      ...assets,
+      // Dynamically added packages
+      "/js/marked/marked.esm.js",
+      "/js/marked-extended-tables/index.js",
+      "/js/marked-alert/index.js",
+      "/js/@highlightjs/highlight.min.js",
+      "/css/@highlightjs/github.min.css",
+      "/css/@highlightjs/github-dark.min.css",
+    ];
+
+    // If needed, cache highlight.js languages dynamically
+    const configData = await getConfig();
+    const highlightLanguages = configData?.highlightLanguages;
+    if (highlightLanguages) {
+      highlightLanguages.forEach(lang => {
+        if (lang.trim()) {
+          assetsToCache.push(`/js/@highlightjs/languages/${lang.trim()}.min.js`);
+        }
+      });
+    }
     
-    console.log("Assets to cache:", assetsToCache);
+    console.log("Assets to cache:", { assetsToCache });
     await cache.addAll(assetsToCache);
     console.log("Cache installation complete for version:", version);
   } catch (error) {
