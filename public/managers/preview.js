@@ -193,17 +193,6 @@ export class PreviewManager {
     }
 
     /**
-     * Render markdown content to the preview pane
-     */
-    async renderMarkdownPreview(content) {
-        // Load any additional languages that might be in the content
-        await this.loadAdditionalLanguages(content);
-        
-        this.previewPane.innerHTML = this.marked.parse(content);
-        this.addCopyLangButtonsToCodeBlocks();
-    }
-
-    /**
      * Toggle between edit, split, and preview modes (3-way cycle)
      */
     async toggleMarkdownPreview(toggle, enable, enableStatusMessage = true) {
@@ -307,6 +296,33 @@ export class PreviewManager {
         element.style.backgroundColor = window.getComputedStyle(this.editor).backgroundColor;
         element.style.color = window.getComputedStyle(this.editor).color;
         element.style.padding = window.getComputedStyle(this.editor).padding;
+    }
+
+    /**
+     * Update preview styles when theme changes
+     * This method should be called from theme toggle events
+     */
+    updatePreviewStyles() {
+        // Only update if preview is currently active
+        if (this.isPreviewActive) {
+            // Listen for transition end on the editor to ensure styles have updated
+            const handleTransitionEnd = (event) => {
+                // Only respond to background-color or color transitions on the editor
+                if ((event.propertyName === 'background-color' || event.propertyName === 'color') && 
+                    event.target === this.editor) {
+                    this.inheritEditorStyles(this.previewPane);
+                    this.editor.removeEventListener('transitionend', handleTransitionEnd);
+                }
+            };
+            
+            this.editor.addEventListener('transitionend', handleTransitionEnd);
+            
+            // Fallback timeout in case transitionend doesn't fire
+            setTimeout(() => {
+                this.editor.removeEventListener('transitionend', handleTransitionEnd);
+                this.inheritEditorStyles(this.previewPane);
+            }, 200);
+        }
     }
 
     /**
@@ -697,7 +713,7 @@ export class PreviewManager {
             }
         }));
         this.marked.use(markedExtendedTables);
-        this.marked.use(markedAlert);
+        this.marked.use(markedAlert());
         this.marked.setOptions({
             breaks: true,
             gfm: true
@@ -757,6 +773,17 @@ export class PreviewManager {
                 console.warn('Error loading additional highlight.js languages:', error);
             }
         }
+    }
+
+    /**
+     * Render markdown content to the preview pane
+     */
+    async renderMarkdownPreview(content) {
+        // Load any additional languages that might be in the content
+        await this.loadAdditionalLanguages(content);
+        
+        this.previewPane.innerHTML = this.marked.parse(content);
+        this.addCopyLangButtonsToCodeBlocks();
     }
 
     /**

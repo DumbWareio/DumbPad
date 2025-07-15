@@ -1206,7 +1206,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
             document.documentElement.setAttribute('data-theme', currentTheme);
             previewManager.updateHighlightTheme(currentTheme);
-            previewManager.inheritEditorStyles(previewManager.previewPane);
+            previewManager.updatePreviewStyles();
             storageManager.save(THEME_KEY, currentTheme);
         });
     }
@@ -1460,6 +1460,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
         
         applySettings(appSettings);
+        previewManager.updatePreviewStyles();
+        previewManager.updateHighlightTheme(currentTheme);
         await registerServiceWorker();
     };
 
