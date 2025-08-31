@@ -1,11 +1,14 @@
 node_modules
 npm-debug.log
 data
+.cursorrules
+.dockerignore
 .git
 .gitignore
-.dockerignore
+docs
 Dockerfile
+docker-compose.yml
 README.md
 .env
 .env.*
-!.env.example 
+!.env.example
