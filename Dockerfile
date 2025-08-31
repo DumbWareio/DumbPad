@@ -5,7 +5,7 @@ ENV NODE_ENV=production
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install --omit=dev
+RUN npm ci --omit=dev
 
 COPY . .
 
@@ -13,7 +13,7 @@ COPY . .
 RUN mkdir -p /app/data /app/public/Assets \
   && chown -R node:node /app/data /app/public/Assets
 
-USER 1000
+USER node
 
 # Create data directory and ensure it's a volume
 VOLUME /app/data
