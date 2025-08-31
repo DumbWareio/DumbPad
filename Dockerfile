@@ -9,8 +9,9 @@ RUN npm install --omit=dev
 
 COPY . .
 
-# 1000 is default node user from base image
-RUN mkdir -p /app/data && chown -R 1000:1000 /app/data && chown -R 1000:1000 /app/public/Assets
+# Ensure dirs exist and set ownership using stable names
+RUN mkdir -p /app/data /app/public/Assets \
+  && chown -R node:node /app/data /app/public/Assets
 
 USER 1000
 
