@@ -23,7 +23,7 @@ A stupid simple, no auth (unless you want it!), modern notepad application with 
   - [Option 1: Docker](#option-1-docker-for-dummies)
   - [Option 2: Docker Compose](#option-2-docker-compose-for-dummies-who-like-customizing)
   - [Option 3: Running Locally](#option-3-running-locally-for-developers)
-- [Upgrading from Previous Versions](#upgrading-from-previous-versions)
+- [Important: Docker Permissions](#upgrading-from-previous-versions)
 - [Configuration](#configuration)
 - [Security](#security)
 - [Technical Details](#technical-details)
@@ -72,6 +72,8 @@ docker run -p 3000:3000 \
 2. Start typing - Your notes auto-save
 3. Marvel at how dumb easy this was
 
+> **⚠️ Note**: If the container crashes with permission errors, see [Docker Permissions](#upgrading-from-previous-versions) section below.
+
 ### Option 2: Docker Compose (For Dummies who like customizing)
 
 Create a `docker-compose.yml` file:
@@ -117,6 +119,8 @@ docker compose up -d
 2. Start typing - Your notes auto-save
 3. Rejoice in the glory of your dumb notes
 
+> **⚠️ Note**: If the container crashes with permission errors, see [Docker Permissions](#upgrading-from-previous-versions) section below.
+
 ### Option 3: Running Locally (For Developers)
 
 1. Install dependencies:
@@ -150,17 +154,30 @@ docker run -p 3000:3000 -v "${PWD}\data:/app/data" dumbwareio/dumbpad:latest
 
 ## Upgrading from Previous Versions
 
-### ⚠️ Important: Docker Users Upgrading to Latest Version
+### ⚠️ Important: Docker Permission Issues (New Installations & Upgrades)
 
-As of [PR #76](https://github.com/DumbWareio/DumbPad/pull/76), DumbPad now runs as a non-root user (UID 1000) inside the Docker container for improved security. **If you're upgrading from a previous version, your existing data directory may have incorrect permissions**, causing your notepads to appear blank ([Issue #74](https://github.com/DumbWareio/DumbPad/issues/74)).
+As of [PR #76](https://github.com/DumbWareio/DumbPad/pull/76), DumbPad now runs as a non-root user (UID 1000) inside the Docker container for improved security. This can cause permission issues in two scenarios:
+
+1. **Upgrading from a previous version** - Existing data directory may have incorrect permissions, causing notepads to appear blank ([Issue #74](https://github.com/DumbWareio/DumbPad/issues/74))
+2. **Fresh installation** - Docker may create the data directory with host user permissions that don't match UID 1000, causing container restart loops with `EACCES: permission denied` errors ([Issue #79](https://github.com/DumbWareio/DumbPad/issues/79))
+
+#### Symptoms
+
+- **Fresh installations**: Container crashes on startup with `Error: EACCES: permission denied, open '/app/data/notepads.json'`
+- **Upgrades**: Previously saved notepads appear blank or empty
 
 #### Solution
 
-You need to update the ownership of your data directory to match the new non-root user:
+##### Option 1: Fix Existing Installation
+
+Set the ownership of your data directory to match the container's non-root user (UID 1000):
 
 **Linux/macOS:**
 ```bash
-# Replace /path/to/your/data with your actual data directory path
+# Stop the container first
+docker stop dumbpad
+
+# Fix permissions (replace /path/to/your/data with your actual path)
 sudo chown -R 1000:1000 /path/to/your/data
 ```
 
@@ -182,21 +199,51 @@ sudo chown -R 1000:1000 /mnt/user/appdata/dumbpad
 # Docker Desktop handles volume permissions automatically
 ```
 
+##### Option 2: Preventive Setup (Fresh Installations)
+
+For new installations, create the data directory with correct permissions **before** starting the container:
+
+**Linux/macOS:**
+```bash
+# Create data directory
+mkdir -p ./data
+
+# Set correct ownership
+sudo chown -R 1000:1000 ./data
+
+# Now start the container
+docker compose up -d
+```
+
+**Windows (Docker Desktop):**
+```powershell
+# No special setup needed - Docker Desktop handles permissions automatically
+docker compose up -d
+```
+
 #### Verifying the Fix
 
-After updating permissions:
+After updating permissions, verify everything is working:
 
-1. Restart your DumbPad container:
+1. **Start/Restart the container:**
    ```bash
    docker restart dumbpad
+   # or if starting fresh
+   docker compose up -d
    ```
 
-2. Check that files are accessible:
+2. **Check container logs** (should start without errors):
+   ```bash
+   docker logs dumbpad
+   ```
+
+3. **Verify file ownership inside container:**
    ```bash
    docker exec dumbpad ls -la /app/data
    ```
+   You should see files owned by `node` or UID `1000`
 
-3. You should see files owned by `node` or UID `1000`
+4. **Test the application** by accessing http://localhost:3000 and creating a test notepad
 
 #### Why This Change?
 
