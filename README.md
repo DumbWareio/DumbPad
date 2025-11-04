@@ -23,6 +23,7 @@ A stupid simple, no auth (unless you want it!), modern notepad application with 
   - [Option 1: Docker](#option-1-docker-for-dummies)
   - [Option 2: Docker Compose](#option-2-docker-compose-for-dummies-who-like-customizing)
   - [Option 3: Running Locally](#option-3-running-locally-for-developers)
+- [Upgrading from Previous Versions](#upgrading-from-previous-versions)
 - [Configuration](#configuration)
 - [Security](#security)
 - [Technical Details](#technical-details)
@@ -146,6 +147,63 @@ If you're using Windows PowerShell with Docker, use this format for paths:
 ```powershell
 docker run -p 3000:3000 -v "${PWD}\data:/app/data" dumbwareio/dumbpad:latest
 ```
+
+## Upgrading from Previous Versions
+
+### ⚠️ Important: Docker Users Upgrading to Latest Version
+
+As of [PR #76](https://github.com/DumbWareio/DumbPad/pull/76), DumbPad now runs as a non-root user (UID 1000) inside the Docker container for improved security. **If you're upgrading from a previous version, your existing data directory may have incorrect permissions**, causing your notepads to appear blank ([Issue #74](https://github.com/DumbWareio/DumbPad/issues/74)).
+
+#### Solution
+
+You need to update the ownership of your data directory to match the new non-root user:
+
+**Linux/macOS:**
+```bash
+# Replace /path/to/your/data with your actual data directory path
+sudo chown -R 1000:1000 /path/to/your/data
+```
+
+**Example for common setups:**
+```bash
+# If using the default ./data directory
+sudo chown -R 1000:1000 ./data
+
+# If using a custom path like /opt/docker/dumbpad
+sudo chown -R 1000:1000 /opt/docker/dumbpad
+
+# For Unraid users
+sudo chown -R 1000:1000 /mnt/user/appdata/dumbpad
+```
+
+**Windows (Docker Desktop):**
+```powershell
+# Windows users typically don't need to change permissions
+# Docker Desktop handles volume permissions automatically
+```
+
+#### Verifying the Fix
+
+After updating permissions:
+
+1. Restart your DumbPad container:
+   ```bash
+   docker restart dumbpad
+   ```
+
+2. Check that files are accessible:
+   ```bash
+   docker exec dumbpad ls -la /app/data
+   ```
+
+3. You should see files owned by `node` or UID `1000`
+
+#### Why This Change?
+
+Running containers as non-root users is a security best practice that:
+- Limits potential damage from container escapes
+- Reduces attack surface
+- Aligns with security compliance standards
 
 ## Features
 
