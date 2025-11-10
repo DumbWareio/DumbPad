@@ -5,11 +5,13 @@
  */
 
 const config = require('../config');
+const ipaddr = require('ipaddr.js');
 
 /**
- * Parse comma-separated list of trusted proxy IPs
- * @param {string} raw - Comma-separated proxy IPs
- * @returns {Array<string>} Array of trimmed proxy IPs
+ * Parse comma-separated list of trusted proxy IPs with inline comment support
+ * Supports shell-style comments: "10.0.0.0/8 # Internal network, 172.17.0.1 # Docker"
+ * @param {string} raw - Comma-separated proxy IPs/CIDRs with optional inline comments
+ * @returns {Array<string>} Array of trimmed, validated proxy IPs/CIDRs
  */
 function parseTrustedProxies(raw) {
     // Handle null/undefined by returning empty array
@@ -20,7 +22,14 @@ function parseTrustedProxies(raw) {
         raw = String(raw);
     }
     
-    return raw.split(',').map(s => s.trim()).filter(Boolean);
+    return raw
+        .split(',')
+        .map(entry => {
+            // Strip inline comments (anything after '#')
+            const withoutComment = entry.split('#')[0];
+            return withoutComment.trim();
+        })
+        .filter(Boolean);
 }
 
 /**
@@ -74,20 +83,62 @@ function firstIpFromXForwardedFor(req) {
 }
 
 /**
- * Check if the remote address is in the trusted proxy list
+ * Check if the remote address is in the trusted proxy list (with CIDR support)
  * @param {string} remoteAddress - Remote address to check
- * @param {Array<string>} trustedList - List of trusted proxy IPs
+ * @param {Array<string>} trustedList - List of trusted proxy IPs/CIDRs
  * @returns {boolean} True if proxy is trusted
  */
 function isTrustedProxy(remoteAddress, trustedList) {
-    // Guard: ensure trustedList is a valid array before calling includes
+    // Guard: ensure trustedList is a valid array
     if (!Array.isArray(trustedList)) return false;
     
     // Use normalizeIp helper to strip IPv6 prefix and handle falsy input
     const normalized = normalizeIp(remoteAddress);
     if (!normalized) return false;
     
-    return trustedList.includes(normalized);
+    // Parse the remote address using ipaddr.js
+    let remoteAddr;
+    try {
+        remoteAddr = ipaddr.process(normalized);
+    } catch (e) {
+        // Invalid IP address format
+        if (process.env.DEBUG === 'true') {
+            console.warn(`Invalid IP address format: ${normalized}`);
+        }
+        return false;
+    }
+    
+    // Check each trusted entry (can be individual IP or CIDR range)
+    for (const trusted of trustedList) {
+        try {
+            // Check if trusted entry contains CIDR notation
+            if (trusted.includes('/')) {
+                // Parse CIDR range
+                const [rangeAddr, prefixLength] = trusted.split('/');
+                const parsedRange = ipaddr.process(rangeAddr);
+                const prefix = parseInt(prefixLength, 10);
+                
+                // Check if IP is within CIDR range
+                if (remoteAddr.kind() === parsedRange.kind() && remoteAddr.match(parsedRange, prefix)) {
+                    return true;
+                }
+            } else {
+                // Exact IP match
+                const parsedTrusted = ipaddr.process(trusted);
+                if (remoteAddr.toString() === parsedTrusted.toString()) {
+                    return true;
+                }
+            }
+        } catch (e) {
+            // Invalid trusted proxy entry, skip it
+            if (process.env.DEBUG === 'true') {
+                console.warn(`Invalid trusted proxy entry: ${trusted}`);
+            }
+            continue;
+        }
+    }
+    
+    return false;
 }
 
 /**
