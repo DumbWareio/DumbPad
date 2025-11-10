@@ -482,6 +482,13 @@ app.post('/api/verify-pin', (req, res) => {
 
     const ip = getClientIp(req);
     
+    // Security: Validate that we have a valid client IP for rate-limiting
+    // Reject requests with null IPs to prevent shared rate-limit counter exploitation
+    if (!ip) {
+        console.error('Unable to determine client IP address for rate-limiting');
+        return res.status(500).json({ error: 'Unable to determine client IP address' });
+    }
+    
     // Check if IP is locked out
     if (isLockedOut(ip)) {
         const attempts = loginAttempts.get(ip);
@@ -527,10 +534,18 @@ app.post('/api/verify-pin', (req, res) => {
 
 // Check if PIN is required
 app.get('/api/pin-required', (req, res) => {
+    const ip = getClientIp(req);
+    
+    // Security: Validate that we have a valid client IP for rate-limiting
+    // If IP is null, default to locked=false to allow the request but log the issue
+    if (!ip) {
+        console.warn('Unable to determine client IP address for /api/pin-required endpoint');
+    }
+    
     res.json({ 
         required: !!PIN && isValidPin(PIN),
         length: PIN ? PIN.length : 0,
-        locked: isLockedOut(getClientIp(req))
+        locked: ip ? isLockedOut(ip) : false
     });
 });
 
