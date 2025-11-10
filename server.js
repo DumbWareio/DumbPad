@@ -18,6 +18,7 @@ const {
 } = require('./scripts/notepad-migration');
 const { TRUST_PROXY, TRUSTED_PROXY_IPS } = require('./config');
 const { getClientIp } = require('./utils/ipExtractor');
+const ipaddr = require('ipaddr.js');
 const HIGHLIGHT_LANGUAGES = process.env.HIGHLIGHT_LANGUAGES
     ? process.env.HIGHLIGHT_LANGUAGES.split(',').map(lang => lang.trim())
     : getHighlightLanguages();
@@ -75,21 +76,46 @@ if (TRUST_PROXY) {
             })
             .filter(ip => ip.length > 0)
             .filter(ip => {
-                // Basic validation for IP/CIDR format
-                // IPv4: digits and dots, optionally with /prefix
-                // IPv6: hex digits and colons, optionally with /prefix
-                // Also accepts 'loopback', 'linklocal', 'uniquelocal' keywords
-                const ipv4Pattern = /^(\d{1,3}\.){3}\d{1,3}(\/\d{1,2})?$/;
-                const ipv6Pattern = /^([0-9a-fA-F:]+)(\/\d{1,3})?$/;
+                // Validate IP/CIDR using ipaddr.js for proper format checking
+                // This prevents malformed IPs like 999.999.999.999 or :::::::: from being accepted
+                // Also accepts 'loopback', 'linklocal', 'uniquelocal' keywords supported by Express
                 const keywordPattern = /^(loopback|linklocal|uniquelocal)$/i;
                 
-                const isValid = ipv4Pattern.test(ip) || ipv6Pattern.test(ip) || keywordPattern.test(ip);
-                
-                if (!isValid) {
-                    console.warn(`Ignoring invalid proxy IP/CIDR entry: "${ip}"`);
+                // Check if it's a valid Express keyword
+                if (keywordPattern.test(ip)) {
+                    return true;
                 }
                 
-                return isValid;
+                try {
+                    // Check if it contains CIDR notation
+                    if (ip.includes('/')) {
+                        const [addr, prefix] = ip.split('/');
+                        const prefixNum = parseInt(prefix, 10);
+                        
+                        // Validate the address part
+                        const parsed = ipaddr.process(addr);
+                        
+                        // Validate prefix length based on IP version
+                        if (parsed.kind() === 'ipv4') {
+                            if (isNaN(prefixNum) || prefixNum < 0 || prefixNum > 32) {
+                                throw new Error('Invalid IPv4 prefix length');
+                            }
+                        } else if (parsed.kind() === 'ipv6') {
+                            if (isNaN(prefixNum) || prefixNum < 0 || prefixNum > 128) {
+                                throw new Error('Invalid IPv6 prefix length');
+                            }
+                        }
+                        
+                        return true;
+                    } else {
+                        // Validate as individual IP address
+                        ipaddr.process(ip);
+                        return true;
+                    }
+                } catch (e) {
+                    console.warn(`Ignoring invalid proxy IP/CIDR entry: "${ip}" - ${e.message}`);
+                    return false;
+                }
             });
         
         if (trustedProxies.length === 0) {
