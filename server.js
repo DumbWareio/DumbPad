@@ -62,13 +62,35 @@ if (TRUST_PROXY) {
         app.set('trust proxy', false);
         console.error('CRITICAL WARNING: TRUST_PROXY=true but TRUSTED_PROXY_IPS is not set or empty.');
         console.error('Trust proxy is disabled for security. Set TRUSTED_PROXY_IPS to enable proxy trust.');
-        console.error('Example: TRUSTED_PROXY_IPS="127.0.0.1,::1,10.0.0.0/8"');
+        console.error('Example: TRUSTED_PROXY_IPS="127.0.0.1 # localhost, ::1 # IPv6 localhost, 10.0.0.0/8 # internal"');
     } else {
-        // Parse and validate TRUSTED_PROXY_IPS (comma-separated list)
+        // Parse and validate TRUSTED_PROXY_IPS (comma-separated list with optional inline comments)
+        // Supports shell-style inline comments: "172.17.0.1 # Docker gateway, 10.0.0.0/8 # Internal"
         const trustedProxies = TRUSTED_PROXY_IPS
             .split(',')
-            .map(ip => ip.trim())
-            .filter(ip => ip.length > 0);
+            .map(entry => {
+                // Strip inline comments (anything after '#')
+                const withoutComment = entry.split('#')[0];
+                return withoutComment.trim();
+            })
+            .filter(ip => ip.length > 0)
+            .filter(ip => {
+                // Basic validation for IP/CIDR format
+                // IPv4: digits and dots, optionally with /prefix
+                // IPv6: hex digits and colons, optionally with /prefix
+                // Also accepts 'loopback', 'linklocal', 'uniquelocal' keywords
+                const ipv4Pattern = /^(\d{1,3}\.){3}\d{1,3}(\/\d{1,2})?$/;
+                const ipv6Pattern = /^([0-9a-fA-F:]+)(\/\d{1,3})?$/;
+                const keywordPattern = /^(loopback|linklocal|uniquelocal)$/i;
+                
+                const isValid = ipv4Pattern.test(ip) || ipv6Pattern.test(ip) || keywordPattern.test(ip);
+                
+                if (!isValid) {
+                    console.warn(`Ignoring invalid proxy IP/CIDR entry: "${ip}"`);
+                }
+                
+                return isValid;
+            });
         
         if (trustedProxies.length === 0) {
             app.set('trust proxy', false);
