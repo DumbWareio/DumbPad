@@ -12,8 +12,28 @@ const config = require('../config');
  * @returns {Array<string>} Array of trimmed proxy IPs
  */
 function parseTrustedProxies(raw) {
-    if (!raw) return [];
+    // Handle null/undefined by returning empty array
+    if (raw == null) return [];
+    
+    // Coerce non-string primitives to string (consistent with firstIpFromXForwardedFor)
+    if (typeof raw !== 'string') {
+        raw = String(raw);
+    }
+    
     return raw.split(',').map(s => s.trim()).filter(Boolean);
+}
+
+/**
+ * Normalize IP address by stripping IPv6 prefix if present
+ * @param {string} ip - IP address to normalize
+ * @returns {string|null} Normalized IP address or null if input is falsy
+ */
+function normalizeIp(ip) {
+    // Return null for falsy input (null, undefined, empty string, etc.)
+    if (!ip) return null;
+    
+    // Strip IPv6 prefix (::ffff:) if present
+    return ip.startsWith('::ffff:') ? ip.split('::ffff:')[1] : ip;
 }
 
 /**
@@ -22,10 +42,18 @@ function parseTrustedProxies(raw) {
  * @returns {string|null} Socket IP address
  */
 function socketIpFromReq(req) {
-    const addr = req.socket && req.socket.remoteAddress ? req.socket.remoteAddress : null;
-    if (!addr) return null;
-    // Strip IPv6 prefix (::ffff:) if present
-    return addr.startsWith('::ffff:') ? addr.split('::ffff:')[1] : addr;
+    // Validate req is a non-null object with socket property
+    if (!req || typeof req !== 'object') {
+        return null;
+    }
+    
+    // Validate socket and remoteAddress exist
+    if (!req.socket || typeof req.socket !== 'object' || !req.socket.remoteAddress) {
+        return null;
+    }
+    
+    // Use normalizeIp helper to strip IPv6 prefix
+    return normalizeIp(req.socket.remoteAddress);
 }
 
 /**
@@ -34,6 +62,11 @@ function socketIpFromReq(req) {
  * @returns {string|null} First IP from X-Forwarded-For or null
  */
 function firstIpFromXForwardedFor(req) {
+    // Guard: ensure req is a non-null object with headers property
+    if (!req || typeof req !== 'object' || !req.headers) {
+        return null;
+    }
+    
     const h = req.headers['x-forwarded-for'];
     if (!h) return null;
     const parts = String(h).split(',').map(p => p.trim()).filter(Boolean);
@@ -47,8 +80,13 @@ function firstIpFromXForwardedFor(req) {
  * @returns {boolean} True if proxy is trusted
  */
 function isTrustedProxy(remoteAddress, trustedList) {
-    if (!remoteAddress) return false;
-    const normalized = remoteAddress.startsWith('::ffff:') ? remoteAddress.split('::ffff:')[1] : remoteAddress;
+    // Guard: ensure trustedList is a valid array before calling includes
+    if (!Array.isArray(trustedList)) return false;
+    
+    // Use normalizeIp helper to strip IPv6 prefix and handle falsy input
+    const normalized = normalizeIp(remoteAddress);
+    if (!normalized) return false;
+    
     return trustedList.includes(normalized);
 }
 
@@ -62,19 +100,52 @@ function isTrustedProxy(remoteAddress, trustedList) {
  * @returns {string|null} Client IP address
  */
 function getClientIp(req) {
+    // Guard: Ensure req is a non-null object
+    if (!req || typeof req !== 'object') {
+        if (process.env.DEBUG === 'true') {
+            console.warn('getClientIp called with invalid req object; returning null');
+        }
+        return null;
+    }
+
+    // Guard: Ensure config is a non-null object
+    if (!config || typeof config !== 'object') {
+        if (process.env.DEBUG === 'true') {
+            console.warn('getClientIp: config is not a valid object; returning socket IP or null');
+        }
+        // Try to extract socket IP even if config is invalid
+        return socketIpFromReq(req) || null;
+    }
+
+    // Guard: Validate req has necessary socket structure before extraction
+    if (!req.socket || typeof req.socket !== 'object') {
+        if (process.env.DEBUG === 'true') {
+            console.warn('getClientIp: req.socket is not a valid object; returning null');
+        }
+        return null;
+    }
+
     const socketIp = socketIpFromReq(req) || null;
 
+    // Safe access to config.TRUST_PROXY with default to false
+    const trustProxy = config.TRUST_PROXY === true;
+
     // Security default: If proxy trust is disabled, always use socket IP
-    if (!config.TRUST_PROXY) {
+    if (!trustProxy) {
         return socketIp;
     }
 
+    // Safe access to config.TRUSTED_PROXY_IPS with default to undefined/null
+    const trustedProxyIps = config.TRUSTED_PROXY_IPS !== undefined ? config.TRUSTED_PROXY_IPS : null;
+    
     // If proxy trust is enabled with explicit trusted proxy list
-    const trustedProxies = parseTrustedProxies(config.TRUSTED_PROXY_IPS);
+    const trustedProxies = parseTrustedProxies(trustedProxyIps);
     if (trustedProxies.length > 0) {
         const remote = socketIp;
         if (!isTrustedProxy(remote, trustedProxies)) {
-            console.warn('Untrusted proxy remote address; ignoring X-Forwarded-For.');
+            if (process.env.DEBUG === 'true') {
+                console.warn('Untrusted proxy remote address; ignoring X-Forwarded-For.');
+            }
             return socketIp;
         }
         // Proxy is trusted, use X-Forwarded-For if available
@@ -84,7 +155,9 @@ function getClientIp(req) {
 
     // TRUST_PROXY=true but no trusted list: fall back to Express-style trust
     // This is less secure but maintains backward compatibility
-    console.warn('TRUST_PROXY=true but TRUSTED_PROXY_IPS not set. Verify deployment proxy settings.');
+    if (process.env.DEBUG === 'true') {
+        console.warn('TRUST_PROXY=true but TRUSTED_PROXY_IPS not set. Verify deployment proxy settings.');
+    }
     const xf = firstIpFromXForwardedFor(req);
     return xf || socketIp;
 }

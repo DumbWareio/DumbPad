@@ -55,12 +55,31 @@ const server = app.listen(PORT, () => {
 });
 
 // Configure proxy trust for secure IP extraction and cookie handling
+// Only enable trust proxy when TRUSTED_PROXY_IPS is properly configured
 if (TRUST_PROXY) {
-    app.set('trust proxy', true);
-    if (!TRUSTED_PROXY_IPS) {
-        console.warn('TRUST_PROXY=true but TRUSTED_PROXY_IPS not set. Verify deployment proxy settings.');
+    if (!TRUSTED_PROXY_IPS || TRUSTED_PROXY_IPS.trim() === '') {
+        // Critical security issue: TRUST_PROXY enabled without specifying trusted proxy IPs
+        app.set('trust proxy', false);
+        console.error('CRITICAL WARNING: TRUST_PROXY=true but TRUSTED_PROXY_IPS is not set or empty.');
+        console.error('Trust proxy is disabled for security. Set TRUSTED_PROXY_IPS to enable proxy trust.');
+        console.error('Example: TRUSTED_PROXY_IPS="127.0.0.1,::1,10.0.0.0/8"');
     } else {
-        console.log('Proxy trust enabled for:', TRUSTED_PROXY_IPS);
+        // Parse and validate TRUSTED_PROXY_IPS (comma-separated list)
+        const trustedProxies = TRUSTED_PROXY_IPS
+            .split(',')
+            .map(ip => ip.trim())
+            .filter(ip => ip.length > 0);
+        
+        if (trustedProxies.length === 0) {
+            app.set('trust proxy', false);
+            console.error('CRITICAL WARNING: TRUSTED_PROXY_IPS provided but contains no valid entries after parsing.');
+            console.error('Trust proxy is disabled for security.');
+        } else {
+            // Configure Express to trust only specified proxy IPs
+            app.set('trust proxy', trustedProxies);
+            console.log('Proxy trust enabled for the following IPs/CIDRs:');
+            trustedProxies.forEach(ip => console.log(`  - ${ip}`));
+        }
     }
 } else {
     app.set('trust proxy', false);
