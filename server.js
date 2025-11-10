@@ -16,6 +16,9 @@ const {
     migrateAllNotepadsToNameBasedFiles, 
     migrateDefaultNotepad 
 } = require('./scripts/notepad-migration');
+const { TRUST_PROXY, TRUSTED_PROXY_IPS } = require('./config');
+const { getClientIp } = require('./utils/ipExtractor');
+const ipaddr = require('ipaddr.js');
 const HIGHLIGHT_LANGUAGES = process.env.HIGHLIGHT_LANGUAGES
     ? process.env.HIGHLIGHT_LANGUAGES.split(',').map(lang => lang.trim())
     : getHighlightLanguages();
@@ -52,8 +55,84 @@ const server = app.listen(PORT, () => {
     console.log(`Version: ${VERSION}`);
 });
 
-// Trust proxy - required for secure cookies behind a reverse proxy
-app.set('trust proxy', 1);
+// Configure proxy trust for secure IP extraction and cookie handling
+// Only enable trust proxy when TRUSTED_PROXY_IPS is properly configured
+if (TRUST_PROXY) {
+    if (!TRUSTED_PROXY_IPS || TRUSTED_PROXY_IPS.trim() === '') {
+        // Critical security issue: TRUST_PROXY enabled without specifying trusted proxy IPs
+        app.set('trust proxy', false);
+        console.error('CRITICAL WARNING: TRUST_PROXY=true but TRUSTED_PROXY_IPS is not set or empty.');
+        console.error('Trust proxy is disabled for security. Set TRUSTED_PROXY_IPS to enable proxy trust.');
+        console.error('Example: TRUSTED_PROXY_IPS="127.0.0.1 # localhost, ::1 # IPv6 localhost, 10.0.0.0/8 # internal"');
+    } else {
+        // Parse and validate TRUSTED_PROXY_IPS (comma-separated list with optional inline comments)
+        // Supports shell-style inline comments: "172.17.0.1 # Docker gateway, 10.0.0.0/8 # Internal"
+        const trustedProxies = TRUSTED_PROXY_IPS
+            .split(',')
+            .map(entry => {
+                // Strip inline comments (anything after '#')
+                const withoutComment = entry.split('#')[0];
+                return withoutComment.trim();
+            })
+            .filter(ip => ip.length > 0)
+            .filter(ip => {
+                // Validate IP/CIDR using ipaddr.js for proper format checking
+                // This prevents malformed IPs like 999.999.999.999 or :::::::: from being accepted
+                // Also accepts 'loopback', 'linklocal', 'uniquelocal' keywords supported by Express
+                const keywordPattern = /^(loopback|linklocal|uniquelocal)$/i;
+                
+                // Check if it's a valid Express keyword
+                if (keywordPattern.test(ip)) {
+                    return true;
+                }
+                
+                try {
+                    // Check if it contains CIDR notation
+                    if (ip.includes('/')) {
+                        const [addr, prefix] = ip.split('/');
+                        const prefixNum = parseInt(prefix, 10);
+                        
+                        // Validate the address part
+                        const parsed = ipaddr.process(addr);
+                        
+                        // Validate prefix length based on IP version
+                        if (parsed.kind() === 'ipv4') {
+                            if (isNaN(prefixNum) || prefixNum < 0 || prefixNum > 32) {
+                                throw new Error('Invalid IPv4 prefix length');
+                            }
+                        } else if (parsed.kind() === 'ipv6') {
+                            if (isNaN(prefixNum) || prefixNum < 0 || prefixNum > 128) {
+                                throw new Error('Invalid IPv6 prefix length');
+                            }
+                        }
+                        
+                        return true;
+                    } else {
+                        // Validate as individual IP address
+                        ipaddr.process(ip);
+                        return true;
+                    }
+                } catch (e) {
+                    console.warn(`Ignoring invalid proxy IP/CIDR entry: "${ip}" - ${e.message}`);
+                    return false;
+                }
+            });
+        
+        if (trustedProxies.length === 0) {
+            app.set('trust proxy', false);
+            console.error('CRITICAL WARNING: TRUSTED_PROXY_IPS provided but contains no valid entries after parsing.');
+            console.error('Trust proxy is disabled for security.');
+        } else {
+            // Configure Express to trust only specified proxy IPs
+            app.set('trust proxy', trustedProxies);
+            console.log('Proxy trust enabled for the following IPs/CIDRs:');
+            trustedProxies.forEach(ip => console.log(`  - ${ip}`));
+        }
+    }
+} else {
+    app.set('trust proxy', false);
+    console.log('Proxy trust disabled (secure default)');
+}
 
 // CORS setup
 const corsOptions = getCorsOptions(BASE_URL);
@@ -449,7 +528,14 @@ app.post('/api/verify-pin', (req, res) => {
         return res.json({ success: true });
     }
 
-    const ip = req.ip;
+    const ip = getClientIp(req);
+    
+    // Security: Validate that we have a valid client IP for rate-limiting
+    // Reject requests with null IPs to prevent shared rate-limit counter exploitation
+    if (!ip) {
+        console.error('Unable to determine client IP address for rate-limiting');
+        return res.status(500).json({ error: 'Unable to determine client IP address' });
+    }
     
     // Check if IP is locked out
     if (isLockedOut(ip)) {
@@ -496,10 +582,18 @@ app.post('/api/verify-pin', (req, res) => {
 
 // Check if PIN is required
 app.get('/api/pin-required', (req, res) => {
+    const ip = getClientIp(req);
+    
+    // Security: Validate that we have a valid client IP for rate-limiting
+    // If IP is null, fail-secure by treating the client as locked out
+    if (!ip) {
+        console.error('SECURITY: Unable to determine client IP address for /api/pin-required endpoint - treating as locked');
+    }
+    
     res.json({ 
         required: !!PIN && isValidPin(PIN),
         length: PIN ? PIN.length : 0,
-        locked: isLockedOut(req.ip)
+        locked: ip ? isLockedOut(ip) : true
     });
 });
 

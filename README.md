@@ -291,7 +291,78 @@ Running containers as non-root users is a security best practice that:
 | MAX_ATTEMPTS            | Maximum PIN entry attempts before lockout                    | 5                     | No       |
 | COOKIE_MAX_AGE          | Maximum age of authentication cookies (in hours)             | 24                    | No       |
 | PAGE_HISTORY_COOKIE_AGE | Age of cookie storing last opened notepad (in days, max 400) | 365                   | No       |
+| TRUST_PROXY             | Enable proxy trust for X-Forwarded-For headers               | false                 | No       |
+| TRUSTED_PROXY_IPS       | Comma-separated list of trusted proxy IPs                    | None                  | No       |
 | HIGHLIGHT_LANGUAGES     | Comma-separated list of code syntax languages to restrict to | all if not supplied   | No       |
+
+### Proxy Trust Configuration
+
+When deploying DumbPad behind a reverse proxy (nginx, Apache, Cloudflare, etc.), you may need to configure proxy trust to correctly identify client IP addresses for rate-limiting and authentication.
+
+#### ⚠️ Security Warning
+
+**By default, `TRUST_PROXY` is `false`** (most secure). Only enable proxy trust if you're deploying behind a trusted reverse proxy. Incorrect configuration can allow attackers to bypass rate-limiting and authentication by spoofing the `X-Forwarded-For` header.
+
+#### When to Enable Proxy Trust
+
+Enable `TRUST_PROXY=true` only if:
+
+1. You're deploying behind a reverse proxy (nginx, Cloudflare, etc.)
+2. The proxy adds `X-Forwarded-For` headers
+3. You can explicitly list all trusted proxy IPs in `TRUSTED_PROXY_IPS`
+
+#### Configuration Examples
+
+**Example 1: Behind nginx on the same host**
+
+```bash
+TRUST_PROXY=true
+TRUSTED_PROXY_IPS=127.0.0.1
+```
+
+**Example 2: Docker with nginx reverse proxy**
+
+```bash
+TRUST_PROXY=true
+TRUSTED_PROXY_IPS=172.17.0.1  # Docker default gateway IP
+```
+
+**Example 3: Multiple proxies (load balancer + nginx)**
+
+```bash
+TRUST_PROXY=true
+TRUSTED_PROXY_IPS=10.0.0.1,10.0.0.2  # IPs of both proxies
+```
+
+**Example 4: Cloudflare (using Cloudflare IPs)**
+
+```bash
+TRUST_PROXY=true
+# List all Cloudflare IP ranges that connect to your origin
+# See: https://www.cloudflare.com/ips/
+TRUSTED_PROXY_IPS=173.245.48.0,103.21.244.0,103.22.200.0,...
+```
+
+#### Finding Your Proxy IP
+
+To find your proxy's IP address:
+
+**Docker:**
+```bash
+docker network inspect bridge | grep Gateway
+```
+
+**Check incoming connections:**
+```bash
+# While DumbPad is running, check who's connecting
+netstat -tn | grep :3000
+```
+
+#### How It Works
+
+- When `TRUST_PROXY=false` (default): Always uses the direct socket IP address, ignoring `X-Forwarded-For` headers
+- When `TRUST_PROXY=true` with `TRUSTED_PROXY_IPS`: Validates the immediate connecting IP against the trusted list before trusting `X-Forwarded-For`
+- When `TRUST_PROXY=true` without `TRUSTED_PROXY_IPS`: Trusts `X-Forwarded-For` from any source (⚠️ not recommended for production)
 
 ## Security
 
@@ -302,12 +373,14 @@ Running containers as non-root users is a security best practice that:
 - Brute force protection:
   - 5 attempts maximum
   - 15-minute lockout after failed attempts
-  - IP-based tracking
+  - IP-based tracking with spoofing protection
+  - Validated client IP extraction (ignores untrusted X-Forwarded-For by default)
 - Secure cookie handling
 - No client-side PIN storage
 - Rate limiting
 - Collaborative editing
 - CORS support for origin restrictions (optional)
+- Configurable proxy trust with IP validation
 
 ## User Settings
 
