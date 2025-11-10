@@ -559,15 +559,15 @@ app.get('/api/pin-required', (req, res) => {
     const ip = getClientIp(req);
     
     // Security: Validate that we have a valid client IP for rate-limiting
-    // If IP is null, default to locked=false to allow the request but log the issue
+    // If IP is null, fail-secure by treating the client as locked out
     if (!ip) {
-        console.warn('Unable to determine client IP address for /api/pin-required endpoint');
+        console.error('SECURITY: Unable to determine client IP address for /api/pin-required endpoint - treating as locked');
     }
     
     res.json({ 
         required: !!PIN && isValidPin(PIN),
         length: PIN ? PIN.length : 0,
-        locked: ip ? isLockedOut(ip) : false
+        locked: ip ? isLockedOut(ip) : true
     });
 });
 
