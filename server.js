@@ -16,6 +16,8 @@ const {
     migrateAllNotepadsToNameBasedFiles, 
     migrateDefaultNotepad 
 } = require('./scripts/notepad-migration');
+const { TRUST_PROXY, TRUSTED_PROXY_IPS } = require('./config');
+const { getClientIp } = require('./utils/ipExtractor');
 const HIGHLIGHT_LANGUAGES = process.env.HIGHLIGHT_LANGUAGES
     ? process.env.HIGHLIGHT_LANGUAGES.split(',').map(lang => lang.trim())
     : getHighlightLanguages();
@@ -52,8 +54,18 @@ const server = app.listen(PORT, () => {
     console.log(`Version: ${VERSION}`);
 });
 
-// Trust proxy - required for secure cookies behind a reverse proxy
-app.set('trust proxy', 1);
+// Configure proxy trust for secure IP extraction and cookie handling
+if (TRUST_PROXY) {
+    app.set('trust proxy', true);
+    if (!TRUSTED_PROXY_IPS) {
+        console.warn('TRUST_PROXY=true but TRUSTED_PROXY_IPS not set. Verify deployment proxy settings.');
+    } else {
+        console.log('Proxy trust enabled for:', TRUSTED_PROXY_IPS);
+    }
+} else {
+    app.set('trust proxy', false);
+    console.log('Proxy trust disabled (secure default)');
+}
 
 // CORS setup
 const corsOptions = getCorsOptions(BASE_URL);
@@ -449,7 +461,7 @@ app.post('/api/verify-pin', (req, res) => {
         return res.json({ success: true });
     }
 
-    const ip = req.ip;
+    const ip = getClientIp(req);
     
     // Check if IP is locked out
     if (isLockedOut(ip)) {
@@ -499,7 +511,7 @@ app.get('/api/pin-required', (req, res) => {
     res.json({ 
         required: !!PIN && isValidPin(PIN),
         length: PIN ? PIN.length : 0,
-        locked: isLockedOut(req.ip)
+        locked: isLockedOut(getClientIp(req))
     });
 });
 
