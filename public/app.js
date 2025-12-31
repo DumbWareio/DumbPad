@@ -1437,7 +1437,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             .then(config => { // Load config and initialize markdown functionality
                 if (config.error) throw new Error(config.error);
 
-                document.getElementById('page-title').textContent = `${config.siteTitle} - Simple Notes`;
+                document.getElementById('page-title').textContent = config.siteTitle;
                 document.getElementById('header-title').textContent = config.siteTitle;
                 
                 return previewManager.initializeMarkdown(currentTheme, editor.value);
