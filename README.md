@@ -152,6 +152,16 @@ If you're using Windows PowerShell with Docker, use this format for paths:
 docker run -p 3000:3000 -v "${PWD}\data:/app/data" dumbwareio/dumbpad:latest
 ```
 
+
+## Easypanel
+
+DumbPad has a one-click deployment template on [Easypanel](https://easypanel.io), a self-hosted Docker deployment platform.
+
+[![Deploy on Easypanel][easypanel-btn]][easypanel-deploy]
+
+[easypanel-btn]: https://easypanel.io/img/deploy-on-easypanel-40.svg
+[easypanel-deploy]: https://easypanel.io/templates/dumbpad
+
 ## Upgrading from Previous Versions
 
 ### ⚠️ Important: Docker Permission Issues (New Installations & Upgrades)
