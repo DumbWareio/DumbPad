@@ -23,6 +23,7 @@ A stupid simple, no auth (unless you want it!), modern notepad application with 
   - [Option 1: Docker](#option-1-docker-for-dummies)
   - [Option 2: Docker Compose](#option-2-docker-compose-for-dummies-who-like-customizing)
   - [Option 3: Running Locally](#option-3-running-locally-for-developers)
+- [One-Click Deploy](#one-click-deploy)
 - [Important: Docker Permissions](#upgrading-from-previous-versions)
 - [Configuration](#configuration)
 - [Security](#security)
@@ -151,6 +152,10 @@ If you're using Windows PowerShell with Docker, use this format for paths:
 ```powershell
 docker run -p 3000:3000 -v "${PWD}\data:/app/data" dumbwareio/dumbpad:latest
 ```
+
+## One-Click Deploy
+
+[![Deploy on RepoCloud](https://d16t0pc4846x52.cloudfront.net/deploylobe.svg)](https://repocloud.io/details/DumbPad/)
 
 ## Upgrading from Previous Versions
 
